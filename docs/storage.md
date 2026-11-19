@@ -1,8 +1,8 @@
 # Recording media
 
-Open **Storage → Recording destination**. **Active directory** shows where the next recording will be saved. Choose **Record to NVMe** for a ready PCIe SSD, **Record to USB** for a ready USB flash drive, or another available recording volume. The choice takes effect immediately. To use a subdirectory, expand **Custom recording directory**, enter its absolute path under an allowed root, and select **Save destination**.
+Open **Storage → Recording destination**. **Active directory** shows the selected medium, the directory for new clips and its remaining space. Use **Browse recordings in this directory** to find clips saved there. Under **Save new recordings to**, choose **Record to NVMe** for a ready PCIe SSD, **Record to USB** for a ready USB flash drive, or another available recording volume. The choice takes effect immediately. To use a subdirectory, expand **Custom recording directory**, enter its absolute path under an allowed root, and select **Save destination**.
 
-Expand **Storage devices** to inspect the device name, mountpoint and capacity of each filesystem. For completed clips, open **Recordings**.
+After connecting a drive, use **Refresh drives** to check the available destinations. Expand **Storage devices** for device names, mountpoints and capacities. If the active directory shows **Unavailable**, check the displayed error and verify the connection and mount before recording. [Troubleshoot a recording I/O error](#troubleshoot-a-recording-io-error)
 
 | Medium | Appearance | Recording destination |
 | --- | --- | --- |
@@ -34,18 +34,18 @@ The package enables the managed recording root on upgrade, including installatio
 
 ## Download a recording
 
-Open **Recordings**. The **Browse recordings from** selector changes only the list you are viewing. Choose the active directory, the default recording directory (the first configured root, usually on the system card), or the top-level recordings directory on a managed USB or NVMe drive. Each distinct directory appears once. For example, while recording to NVMe, select **Default recording directory** to find an earlier clip on the system card. Each completed recording has its own session directory. The list refreshes when the console sees a recording finish. Use **Refresh recordings** to reload it manually.
+Open **Recordings**. The **Browse recordings from** selector changes only the list you are viewing. Choose the current destination, the default recording directory (the first configured root, usually on the system card), or the top-level recordings directory on a managed USB or NVMe drive. Each distinct directory appears once. For example, while recording to NVMe, select **Default recording directory** to find an earlier clip on the system card. A clip in progress appears in the list after it finishes. Each row shows its start time in the browser’s time zone, saved frame count and total size of the session files. Use **Refresh recordings** to reload the list manually.
 
 Select **Download recording (.zip)** on a completed session. The ZIP contains the original `video.y4m` (high-speed YUV420) or `video.mjpeg` (Motion JPEG), `frames.csv` with per-frame timestamps, and `session.json`. On your computer, pass the ZIP directly to the MP4 exporter. [Convert a recording on a Mac or PC](post-processing.md)
 
-Open **Individual files** to retrieve just the video, index or manifest. Individual file downloads support HTTP byte ranges for resuming an interrupted transfer. An interrupted ZIP download restarts from the beginning. Both use HTTPS and follow the console's token setting. Refresh the list if the source changes.
+Open **Files and actions** to see the session directory name or retrieve just the video, index or manifest. Individual file downloads support HTTP byte ranges for resuming an interrupted transfer. An interrupted ZIP download restarts from the beginning. Both use HTTPS and follow the console's token setting. Refresh the list if the source changes.
 
 ## Troubleshoot a recording I/O error
 
 An `[Errno 5] Input/output error` with a session directory name means a filesystem operation failed. It can appear while creating or finalizing a clip, or while reading a directory to display recordings. The error alone does not identify the device or tell you how much of the clip was written.
 
 1. Note the exact session name, the time, and **Storage → Active directory**. In **Monitor**, check whether a recording is active or waiting to resume. Use **Stop & pause triggers** if a rule still holds it. While investigating storage you can pause the automatic rules from **Triggers** as well. In earlier versions, disable the active rule and release any manual hold. [Recording controls](triggers.md#input-timing-and-troubleshooting)
-2. From the workstation checkout, collect the board report over the cable with `./install.sh --diagnose ubuntu@192.168.55.100`, substituting the board's SSH login and address. The diagnostic run is read-only and works offline. Keep the report with the session name.
+2. From the workstation checkout, run `./install.sh --diagnose ubuntu@192.168.55.100` using the board's SSH login and address. The report works offline and is read-only. In `diagnostics.txt`, look under **Recording drive faults (previous boot, visible to this account)** if the drive came back after a reboot. Each boot has a separate section with up to 12 matching controller or transport messages and 12 matching filesystem or I/O errors. If the Pi discarded the journal at reboot or your SSH account cannot read it, the report marks that boot’s kernel journal as unavailable. Keep the report with the session name.
 3. On the Pi, use the commands below to compare the intended volume against the mounted device and inspect recent errors. For USB, replace the NVMe mountpoint with `/srv/rpi-web-control-usb`. For the system card or a custom location, use `findmnt --target /path/to/active/directory` with the actual directory.
 
    ```sh
@@ -59,7 +59,7 @@ Check for a missing mount or storage resets near the time of the failure. An NVM
 
 ## Delete recordings and free space
 
-In **Recordings**, choose the managed USB or NVMe directory you want to clean. Finish active recordings and release recording triggers first. To remove one completed session, use **Delete recording…** on its row. To remove eligible completed sessions directly in the displayed directory, choose **Clean recordings…**. Review the device, directory, number of sessions and total bytes. Type `DELETE` for one session or `CLEAN` for the directory, then confirm. Choose **Cancel** to close the review. Deleting a session removes its video, frame index and manifest together.
+In **Recordings**, choose the managed USB or NVMe directory you want to clean. Finish active recordings and release recording triggers first. To remove one completed session, open **Files and actions** on its row and choose **Delete recording…**. To review eligible completed sessions across the displayed directory, open **Free up space → Clean recordings…**. Review the device, directory, number of sessions and total bytes. Type `DELETE` for one session or `CLEAN` for the directory, then confirm. Choose **Cancel** to close the review. Deleting a session removes its video, frame index and manifest together.
 
 Cleanup is limited to verified controller recordings on managed external volumes. The Pi's system disk, its other partitions, unrelated files and incomplete recordings are excluded. If the drive or the selected files change after review, request a fresh review. To preserve a clip, download its ZIP before confirming deletion.
 

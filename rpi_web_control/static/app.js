@@ -1,4 +1,4 @@
-import {byId, setText, element, button, capacity} from "./ui.js";
+import {byId, setText, element, button, capacity, destinationLabel} from "./ui.js";
 import {setupNetworkPanel} from "./network.js";
 import {setupDevicePanels, renderSensorProperties} from "./device.js";
 
@@ -20,6 +20,7 @@ const headerPins = [27, 28, 3, 5, 7, 29, 31, 26, 24, 21, 19, 23, 32, 33,
   8, 10, 36, 11, 12, 35, 38, 40, 15, 16, 18, 22, 37, 13];
 const integerFormat = new Intl.NumberFormat("en-US");
 const fpsFormat = new Intl.NumberFormat("en-US", {maximumFractionDigits: 2});
+const recordingSizeFormat = new Intl.NumberFormat("en-US", {maximumSignificantDigits: 4});
 const clockFormat = new Intl.DateTimeFormat("en-GB", {
   year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
   second: "2-digit", timeZoneName: "short",
@@ -33,6 +34,7 @@ let page = "monitor";
 let polling = 0;
 let refreshId = 0;
 let authenticated = false;
+let deviceOnline = false;
 let actionPending = false;
 let editingRule = null;
 let lastRuleList = null;
@@ -100,10 +102,14 @@ function signInScreen() {
 }
 
 function connection(online) {
+  deviceOnline = online;
   setText("connection-status", online ? "Connected" : "Reconnecting");
   byId("connection-lamp").className = "lamp " + (online ? "good" : "bad");
   byId("offline-message").hidden = online;
-  if (!online) byId("clock-notice").hidden = true;
+  if (!online) {
+    byId("clock-notice").hidden = true;
+    renderMonitor();
+  }
 }
 
 function clockGap(ms) {
@@ -242,7 +248,7 @@ function stopStream() {
 function updateStream() {
   const enabled = Boolean(snapshot?.camera.preview);
   const available = capabilities?.available !== false;
-  const viewing = authenticated && enabled && page === "monitor" && !document.hidden;
+  const viewing = authenticated && deviceOnline && enabled && page === "monitor" && !document.hidden;
   const image = byId("stream");
   if (viewing && !image.hasAttribute("src") && Date.now() >= nextStreamAttempt) {
     image.src = "/api/stream.mjpg?t=" + Date.now();
@@ -253,9 +259,50 @@ function updateStream() {
   byId("stage-empty").hidden = !image.hidden;
   byId("fullscreen").disabled = actionPending || image.hidden || !byId("stage").requestFullscreen;
   if (!viewing || image.hidden) {
-    setText("stage-title", !available ? "Camera unavailable" : enabled ? "Waiting for frames" : "Preview is off");
-    setText("stage-help", !available ? (capabilities.error || "Check the camera connection.") : enabled ? "The preview will resume when frames arrive." : "Enable preview to see the camera feed.");
+    if (!deviceOnline) {
+      setText("stage-title", "Pi disconnected");
+      setText("stage-help", "Waiting for the connection to resume.");
+    } else {
+      setText("stage-title", !available ? "Camera unavailable" : enabled ? "Waiting for frames" : "Preview is off");
+      setText("stage-help", !available ? (capabilities.error || "Check the camera connection.") : enabled ? "The preview will resume when frames arrive." : "Enable preview to see the camera feed.");
+    }
   }
+}
+
+function timeRemaining(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  if (!minutes) return "<1 min";
+  if (minutes < 60) return minutes + " min";
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return hours + " h " + (minutes % 60) + " min";
+  return Math.floor(hours / 24) + " d " + (hours % 24) + " h";
+}
+
+function renderRecordingStorage(cam, storageError) {
+  const volume = snapshot.storage;
+  const dirs = snapshot.recording_directories || {current: snapshot.config.storage.directory};
+  const medium = destinationLabel(dirs);
+  const hasCapacity = deviceOnline && Number.isFinite(volume?.free_bytes) && volume.total_bytes > 0;
+  const free = hasCapacity ? capacity(volume.free_bytes) + " free" : "Capacity unavailable";
+  setText("toolbar-destination", deviceOnline ? "Record to " + medium + (hasCapacity ? " · " + free : "") : "Recording storage");
+  byId("toolbar-destination").title = dirs.current;
+  setText("monitor-destination", medium);
+  setText("record-location", dirs.current);
+  setText("monitor-space", free);
+  const usage = byId("disk-usage");
+  usage.hidden = !hasCapacity;
+  if (hasCapacity) usage.value = (1 - volume.free_bytes / volume.total_bytes) * 100;
+  byId("storage-alert").hidden = !deviceOnline || !storageError;
+  setText("storage-alert-reason", storageError);
+  const metrics = byId("recording-metrics");
+  metrics.hidden = !deviceOnline || !cam.recording || Boolean(storageError);
+  if (metrics.hidden) return;
+  const bytes = cam.recording_video_bytes;
+  const rate = cam.recording_video_bytes_per_second;
+  const hasRate = Number.isFinite(rate) && rate > 0;
+  setText("monitor-written", Number.isFinite(bytes) ? capacity(bytes) : "—");
+  setText("monitor-rate", hasRate ? recordingSizeFormat.format(rate / 1e6) + " MB/s" : "—");
+  setText("monitor-remaining", hasCapacity && hasRate ? timeRemaining(volume.free_bytes / rate) : "—");
 }
 
 function renderMonitor() {
@@ -268,45 +315,48 @@ function renderMonitor() {
   const stopping = cam.recording || owners.length > 0;
   const record = byId("record");
   const camAvailable = capabilities?.available !== false;
-  record.disabled = actionPending || (!camAvailable && !stopping);
+  const storageError = snapshot.storage?.error || (snapshot.storage?.free_bytes === 0 ? "The recording destination is full." : "");
+  const testing = cam.mode_test?.state === "running";
+  record.disabled = actionPending || !deviceOnline || (!stopping && (!camAvailable || testing || Boolean(storageError)));
   record.classList.toggle("active", stopping);
   record.querySelector("use").setAttribute("href", stopping ? "#i-stop" : "#i-record");
   record.querySelector("span").textContent = triggers.length ? "Stop & pause triggers" : stopping ? "Stop recording" : "Start recording";
-  byId("trigger-pause-notice").hidden = !snapshot.triggers_paused;
-  byId("resume-triggers").disabled = actionPending;
+  byId("trigger-pause-notice").hidden = !deviceOnline || !snapshot.triggers_paused;
+  byId("resume-triggers").disabled = actionPending || !deviceOnline;
   byId("trigger-pause").hidden = snapshot.triggers_paused || !snapshot.config.triggers.some(rule => rule.enabled);
-  byId("trigger-pause").disabled = actionPending;
-  byId("manual-hold").hidden = !triggers.length || (!manual && !cam.recording);
+  byId("trigger-pause").disabled = actionPending || !deviceOnline;
+  byId("manual-hold").hidden = !deviceOnline || !triggers.length || (!manual && !cam.recording);
   byId("manual-hold").disabled = actionPending;
   setText("manual-hold", manual ? "Release manual hold" : "Add manual hold");
   setText("device-name", capabilities?.model || (cam.backend === "simulated" ? "Simulated camera" : "Capture device"));
   const preview = byId("preview");
-  preview.disabled = actionPending || cam.mode_test?.state === "running" || (!camAvailable && !cam.preview);
+  preview.disabled = actionPending || !deviceOnline || testing || (!camAvailable && !cam.preview);
   preview.setAttribute("aria-pressed", String(cam.preview));
   preview.querySelector("span").textContent = cam.preview ? "Disable preview" : "Enable preview";
-  setText("stream-state", cam.preview ? "Enabled" : "Off");
-  byId("stream-state").classList.toggle("live", cam.preview);
+  setText("stream-state", !deviceOnline ? "Unknown" : cam.preview ? "Enabled" : "Off");
+  byId("stream-state").classList.toggle("live", deviceOnline && cam.preview);
   setText("actual-fps", cam.active && Number.isFinite(cam.actual_fps) ? fpsFormat.format(cam.actual_fps) : "—");
   setText("target-fps", fpsFormat.format(settings.fps) + " fps");
   const mode = cam.sensor_mode;
   setText("active-sensor-mode", mode ? mode.width + " × " + mode.height + " · " + mode.bit_depth + "-bit" : "—");
   setText("resolution", settings.width + " × " + settings.height);
   setText("osd-status", cam.osd_effective ? "Enabled" : "Off");
-  setText("frame-count", Number.isFinite(cam.frames) ? integerFormat.format(cam.frames) : "—");
+  setText("frame-count-label", cam.recording ? "Frames in this clip" : "Frames in last clip");
+  setText("frame-count", cam.session && Number.isFinite(cam.frames) ? integerFormat.format(cam.frames) : "—");
   setText("dropped-count", Number.isFinite(cam.dropped_frames) ? integerFormat.format(cam.dropped_frames) : "—");
-  setText("record-state", cam.recording ? "Recording" : owners.length ? "Waiting to resume" : "Idle");
-  byId("record-state").classList.toggle("recording", cam.recording);
-  byId("record-state").classList.toggle("waiting", !cam.recording && owners.length > 0);
-  const volume = snapshot.storage;
-  const hasCapacity = Number.isFinite(volume?.free_bytes) && volume.total_bytes > 0;
-  setText("monitor-space", hasCapacity ? capacity(volume.free_bytes) + " free" : "Capacity unavailable");
-  const usage = byId("disk-usage");
-  usage.hidden = !hasCapacity;
-  if (hasCapacity) usage.value = (1 - volume.free_bytes / volume.total_bytes) * 100;
-  setText("record-location", cam.recording && cam.session ? cam.session : snapshot.config.storage.directory);
+  let state = camAvailable ? "Idle" : "Camera unavailable";
+  if (!deviceOnline) state = "Status unknown";
+  else if (cam.recording) state = "Recording";
+  else if (owners.length) state = "Waiting to resume";
+  else if (testing) state = "Testing camera";
+  setText("record-state", state);
+  byId("record-state").classList.toggle("recording", deviceOnline && cam.recording);
+  byId("record-state").classList.toggle("waiting", deviceOnline && !cam.recording && owners.length > 0);
+  renderRecordingStorage(cam, storageError);
   const labels = owners.map(source => source.startsWith("trigger:") ? "rule “" + source.slice(8) + "”" : "manual control");
   setText("record-sources", owners.length ? "Recording requested by " + labels.join(", ") : "");
-  setText("camera-error", cam.last_error || snapshot.storage?.error || capabilities?.error || "");
+  byId("record-sources").hidden = !deviceOnline || !owners.length;
+  setText("camera-error", cam.last_error || capabilities?.error || "");
   const rules = snapshot.config.triggers;
   const active = (snapshot.triggers || []).filter(rule => rule.active).length;
   const errors = (snapshot.triggers || []).filter(rule => rule.state === "error").length;
@@ -326,15 +376,36 @@ function fillSettings(formId, settings) {
   }
 }
 
-function describeFormat() {
-  const fields = byId("camera-form").elements;
+function renderCameraSettings() {
+  const form = byId("camera-form");
+  const fields = form.elements;
   const fps = fields.fps.valueAsNumber;
-  const raw = fps > 60;
-  const bytes = fields.width.valueAsNumber * fields.height.valueAsNumber * 1.5 * fps;
-  const bandwidth = raw && bytes > 0 && Number.isFinite(bytes)
-    ? " Frame data requires " + fpsFormat.format(bytes / (1024 ** 2)) + " MiB/s." : "";
-  setText("capture-format", raw ? "Raw YUV420 recording. Timestamp overlay is disabled above 60 fps." + bandwidth
-    : "Motion JPEG recording with a separate timestamp for each saved frame.");
+  const raw = fields.fps.validity.valid && fps > 60;
+  const hasEstimate = raw && fields.width.validity.valid && fields.height.validity.valid;
+  byId("camera-overlay").hidden = raw;
+  byId("capture-estimates").hidden = !hasEstimate;
+  setText("capture-format", !fields.fps.validity.valid ? "—" : raw ? "Uncompressed YUV420 (Y4M)" : "Motion JPEG (MJPEG)");
+  if (hasEstimate) {
+    const bytesPerSecond = fields.width.valueAsNumber * fields.height.valueAsNumber * 1.5 * fps;
+    setText("capture-rate", recordingSizeFormat.format(bytesPerSecond / 1e6) + " MB/s");
+    setText("capture-space", recordingSizeFormat.format(bytesPerSecond * 60 / 1e9) + " GB/min");
+  }
+  let help = "Enter a target frame rate from 1 to 1000 fps.";
+  if (raw) {
+    help = hasEstimate ? "Estimates cover frame data at the target rate. Allow extra space for the frame index and headers."
+      : "Enter valid output dimensions to estimate write rate and recording size.";
+    help += " Above 60 fps, sensor time is saved in frames.csv without an image overlay.";
+  } else if (fields.fps.validity.valid) {
+    help = "JPEG size varies with the scene. Check Average video rate on Monitor during a sample recording. Each frame’s sensor time is saved in frames.csv.";
+  }
+  setText("capture-format-help", help);
+  const cam = snapshot?.camera;
+  let lock = "";
+  if (cam?.mode_test?.state === "running") lock = "Finish the sensor test to save settings.";
+  else if (cam?.recording || snapshot?.recording_sources.length) lock = "Stop recording before saving settings.";
+  else if (cam?.live?.enabled) lock = "Stop the live stream before saving settings.";
+  form.querySelector('[type="submit"]').disabled = actionPending || Boolean(lock);
+  setText("camera-save-state", lock || (dirtyForms.has("camera-form") ? "Unsaved changes" : ""));
 }
 
 function updateSensorDepthOptions() {
@@ -358,10 +429,10 @@ function renderModes() {
   const selection = byId("mode-test-selection");
   const selected = selection.value;
   selection.replaceChildren(new Option("All detected modes", ""));
-  setText("mode-help", modes.length ? "Select a mode to fill in its resolution, sensor bit depth and maximum frame rate. Adjust the target rate if needed, then save." : capabilities?.error || "No sensor modes reported.");
+  setText("mode-help", modes.length ? "A preset fills in the dimensions, sensor bit depth and advertised maximum frame rate. You can lower the target rate before saving." : capabilities?.error || "No sensor modes reported.");
   byId("modes").replaceChildren(...modes.map(mode => {
     const rate = Math.floor(mode.max_fps * 100) / 100;
-    const label = mode.width + " × " + mode.height + " · " + fpsFormat.format(rate) + " fps" +
+    const label = mode.width + " × " + mode.height + " · up to " + fpsFormat.format(rate) + " fps" +
       (mode.bit_depth ? " · " + mode.bit_depth + "-bit" : "");
     const key = modeKey(mode);
     selection.add(new Option(label, key, false, key === selected));
@@ -372,7 +443,8 @@ function renderModes() {
       form.elements.fps.value = rate;
       form.elements.sensor_bit_depth.value = String(mode.bit_depth || 0);
       dirtyForms.add("camera-form");
-      describeFormat();
+      renderCameraSettings();
+      byId("camera-presets").open = false;
       form.elements.fps.focus();
     });
   }));
@@ -388,7 +460,6 @@ function renderModeTest() {
   byId("mode-test-cancel").hidden = !running;
   byId("mode-test-cancel").disabled = actionPending;
   byId("mode-test-selection").disabled = actionPending || running;
-  byId("camera-form").querySelector('[type="submit"]').disabled = actionPending || running || cam.recording || cam.live?.enabled;
   setText("mode-test-lock", inUse && !running ? "Stop preview, streaming and any recording sources before running a test." : "");
   const results = test?.results || [];
   const sensorLabel = mode => mode.width + " × " + mode.height + " · " + mode.bit_depth + "-bit";
@@ -651,7 +722,7 @@ function render() {
   updateSensorDepthOptions();
   fillSettings("camera-form", snapshot.config.camera);
   renderModeTest();
-  describeFormat();
+  renderCameraSettings();
   fillSettings("storage-form", snapshot.config.storage);
   renderRoots();
   renderRules();
@@ -721,7 +792,7 @@ byId("stream").addEventListener("error", () => {
 for (const id of ["camera-form", "storage-form"]) {
   byId(id).addEventListener("input", () => {
     dirtyForms.add(id);
-    if (id === "camera-form") describeFormat();
+    if (id === "camera-form") renderCameraSettings();
     else if (snapshot) renderRoots();
   });
   byId(id).addEventListener("submit", event => {
@@ -731,16 +802,18 @@ for (const id of ["camera-form", "storage-form"]) {
       saveDestination(fields.directory.value);
       return;
     }
-    const payload = {camera: {
+    const cameraDraft = () => ({
       width: fields.width.valueAsNumber,
       height: fields.height.valueAsNumber,
       fps: fields.fps.valueAsNumber,
       sensor_bit_depth: Number(fields.sensor_bit_depth.value),
       osd: fields.osd.checked,
-    }};
+    });
+    const camera = cameraDraft();
     act(async () => {
-      await api("config", payload);
-      dirtyForms.delete(id);
+      await api("config", {camera});
+      const current = cameraDraft();
+      if (Object.keys(camera).every(key => camera[key] === current[key])) dirtyForms.delete(id);
     }, "Camera settings saved.");
   });
 }

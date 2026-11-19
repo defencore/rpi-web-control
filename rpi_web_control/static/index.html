@@ -64,10 +64,18 @@
       <header class="page-header">
         <div><div class="device-name"><svg><use href="#i-camera"/></svg><span id="device-name">Capture device</span></div>
         <h1 id="page-title" tabindex="-1">Monitor</h1></div>
-        <div class="record-controls"><span id="record-state" class="status-chip" role="status">Idle</span>
-          <button id="record" class="button record-button" type="button"><svg aria-hidden="true"><use href="#i-record"/></svg><span>Start recording</span></button></div>
+        <div class="record-toolbar">
+          <div class="record-controls"><span id="record-state" class="status-chip" role="status">Checking</span>
+            <button id="record" class="button record-button" type="button" disabled><svg aria-hidden="true"><use href="#i-record"/></svg><span>Start recording</span></button></div>
+          <a id="toolbar-destination" class="destination-link" href="#storage"></a>
+          <p id="record-sources" class="subtle" hidden></p>
+          <button id="manual-hold" class="button secondary small" type="button" hidden>Add manual hold</button>
+        </div>
       </header>
-      <p id="offline-message" class="notice error" role="status" hidden>Connection lost. Reconnecting to the device…</p>
+      <p id="offline-message" class="notice error" role="status" hidden>Connection lost. The readings below were last received from the Pi. Reconnecting…</p>
+      <div id="storage-alert" class="notice error" role="status" hidden>
+        <strong>Recording destination unavailable</strong><p id="storage-alert-reason"></p><a href="#storage">Check recording storage</a>
+      </div>
       <p id="feedback" class="notice" role="status" aria-live="polite"></p>
       <section class="clock-notice" id="trigger-pause-notice" aria-label="Recording triggers paused" hidden>
         <div><strong>Recording triggers paused</strong><p class="field-help">Return any held contacts to their idle position before resuming.</p></div>
@@ -96,9 +104,17 @@
         </div>
       </section>
       <section id="page-monitor" aria-label="Monitor">
+        <div id="recording-metrics" class="panel" hidden>
+          <dl class="fact-grid">
+            <div><dt>Video written</dt><dd id="monitor-written">—</dd></div>
+            <div><dt>Average video rate</dt><dd id="monitor-rate">—</dd></div>
+            <div><dt>Estimated time left</dt><dd id="monitor-remaining">—</dd></div>
+          </dl>
+          <p class="field-help">Time left uses the free space and this clip’s average video rate.</p>
+        </div>
         <div class="monitor-layout">
           <article class="panel preview-panel" id="preview-panel">
-            <header class="panel-title"><h2><svg aria-hidden="true"><use href="#i-preview"/></svg>Camera preview</h2><span class="status-chip" id="stream-state">Off</span></header>
+            <header class="panel-title"><h2><svg aria-hidden="true"><use href="#i-preview"/></svg>Browser preview</h2><span class="status-chip" id="stream-state">Off</span></header>
             <div class="stage" id="stage">
               <img id="stream" alt="Live camera preview" hidden>
               <div class="stage-empty" id="stage-empty"><svg><use href="#i-preview"/></svg><strong id="stage-title">Preview is off</strong><span id="stage-help">Enable preview to see the camera feed.</span></div>
@@ -116,18 +132,17 @@
               <div><dt>Target rate</dt><dd id="target-fps">—</dd></div>
               <div><dt>Active sensor mode</dt><dd id="active-sensor-mode">—</dd></div>
               <div><dt>On-screen display</dt><dd id="osd-status">—</dd></div>
-              <div><dt>Captured frames</dt><dd id="frame-count">—</dd></div>
+              <div><dt id="frame-count-label">Recorded frames</dt><dd id="frame-count">—</dd></div>
               <div><dt>Estimated missed frames</dt><dd id="dropped-count">—</dd></div>
             </dl>
           </article>
         </div>
         <div class="summary-layout">
-          <article class="panel summary"><header><svg><use href="#i-drive"/></svg><h2>Recording storage</h2></header>
-            <div class="summary-body"><strong id="monitor-space">—</strong>
-              <meter id="disk-usage" aria-label="Disk space used" min="0" max="100" hidden></meter>
-              <p id="record-location" class="mono"></p><p class="subtle" id="record-sources"></p>
-              <button id="manual-hold" class="button secondary small" type="button" hidden>Add manual hold</button></div>
-            <a class="panel-link" href="#storage">Manage destination <svg><use href="#i-chevron"/></svg></a></article>
+          <article class="panel summary"><header><svg><use href="#i-drive"/></svg><h2>Recording destination</h2></header>
+            <div class="summary-body"><strong id="monitor-destination">—</strong>
+              <p id="record-location" class="mono"></p><p id="monitor-space" class="subtle">—</p>
+              <meter id="disk-usage" aria-label="Disk space used" min="0" max="100" hidden></meter></div>
+            <a id="monitor-browse" class="panel-link" href="#recordings">Browse recordings <svg><use href="#i-chevron"/></svg></a></article>
           <article class="panel summary"><header><svg><use href="#i-trigger"/></svg><h2>Triggers</h2></header>
             <div class="summary-body"><strong id="trigger-count">—</strong><p id="trigger-summary" class="subtle"></p></div>
             <a class="panel-link" href="#triggers">Manage triggers <svg><use href="#i-chevron"/></svg></a></article>
@@ -136,79 +151,101 @@
       </section>
       <section id="page-live" class="settings-page" aria-label="Live stream" hidden>
         <form id="live-form" class="panel settings-card">
-          <header class="panel-title"><h2>RTP/JPEG sender</h2><span class="status-chip" id="live-state">Off</span></header>
+          <header class="panel-title"><h2>Stream to a computer</h2><span class="status-chip" id="live-state">Off</span></header>
           <div class="form-body">
             <dl class="fact-grid"><div><dt>Camera output</dt><dd id="live-mode">—</dd></div><div id="live-destination" hidden><dt>Receiver IP and port</dt><dd id="live-endpoint">—</dd></div><div id="live-active-limit" hidden><dt>Stream FPS limit</dt><dd id="live-active-max-fps">—</dd></div></dl>
-            <div class="field-pair" id="live-receiver-fields">
+            <div id="live-receiver-fields" class="field-pair">
               <label>Receiver IP<input id="live-host" name="host" type="text" placeholder="Automatic" aria-describedby="live-host-help" autocapitalize="none" autocomplete="off" spellcheck="false" maxlength="64"></label>
               <label>Receiver UDP port<input id="live-port" name="port" type="number" min="1024" max="65535" step="1" value="5004" required></label>
-              <label>Stream FPS limit<input id="live-max-fps" name="max_fps" type="number" min="1" max="1000" step="1" placeholder="Camera rate" aria-describedby="live-limit"></label>
+              <label>Stream FPS limit<input id="live-max-fps" name="max_fps" type="number" min="1" max="1000" step="1" placeholder="Camera rate" aria-describedby="live-fps-help"></label>
+              <p id="live-host-help" class="field-help">Leave the IP blank to send video to this device. If you control the Pi from a phone and watch on a computer, enter the computer’s IP.</p>
+              <p id="live-fps-help" class="field-help">A lower limit uses less bandwidth. Local recording keeps the camera rate.</p>
             </div>
-            <p id="live-host-help" class="field-help">Leave the IP blank to stream to this browser’s device, or enter the receiving computer’s IPv4 or IPv6 address.</p>
-            <p id="live-limit" class="field-help"></p>
-            <div class="sender-stats">
-              <dl class="fact-grid"><div><dt>Capture rate</dt><dd id="live-capture-fps">—</dd></div><div><dt>Sender rate</dt><dd id="live-fps">—</dd></div><div><dt>Throughput</dt><dd id="live-bitrate">—</dd></div><div><dt>Sender drops</dt><dd id="live-drops">—</dd></div></dl>
-              <details class="sender-details"><summary>Sender diagnostics</summary>
-                <dl class="fact-grid"><div><dt>Frames sent</dt><dd id="live-frames">—</dd></div><div><dt>Queue replacements</dt><dd id="live-queue-drops">—</dd></div><div><dt>Network congestion drops</dt><dd id="live-congestion-drops">—</dd></div><div><dt>UDP retries</dt><dd id="live-retries">—</dd></div><div><dt>Skipped by FPS limit</dt><dd id="live-rate-limited">—</dd></div></dl>
-              </details>
-            </div>
+            <details id="live-player" open>
+              <summary>Open the player on the receiving computer</summary>
+              <p class="field-help">Run this command in Terminal on macOS or Linux, or in Command Prompt on Windows. Leave it running. A video window opens when the Pi starts sending frames.</p>
+              <pre class="command"><code id="receiver-command"></code></pre>
+              <button class="button secondary small" type="button" id="copy-command">Copy receiver command</button>
+            </details>
+            <p id="live-limit" class="field-help" role="status"></p>
             <p class="notice error" id="live-error" role="status"></p>
           </div>
           <footer class="form-footer"><button type="submit" id="live-toggle" class="button primary" disabled>Start live stream</button><a class="text-link" href="#camera">Camera settings</a></footer>
         </form>
-        <article class="panel settings-card"><header class="panel-title"><h2>View on a remote computer</h2></header>
+        <article class="panel" id="live-statistics" hidden>
+          <header class="panel-title"><h2 id="live-stats-title">Stream performance</h2></header>
           <div class="form-body">
-            <ol class="instructions">
-              <li><strong>Connect to the device.</strong> Use Ethernet, join the same Wi-Fi network, or join the device’s access point. Open this address in your browser. If prompted, enter the device token.<code class="inline-code" id="console-url"></code><span class="field-help" id="loopback-help"></span></li>
-              <li><strong>Install GStreamer on the receiving computer.</strong>
-                <div class="receiver-setup">
-                  <details><summary>Windows</summary>
-                    <p>On the <a href="https://gstreamer.freedesktop.org/download/" target="_blank" rel="noopener">GStreamer download page</a>, open Windows and choose MSVC x86_64 for an Intel or AMD PC, or MSVC arm64 for Windows on Arm. Run the installer and select “Only runtime”.</p>
-                    <p>Open a new Command Prompt. If it cannot find <code>gst-launch-1.0</code>, add the installed folder containing <code>gst-launch-1.0.exe</code> to your user Path, then reopen Command Prompt. A default per-user x64 install uses <code>%LOCALAPPDATA%\Programs\gstreamer\1.0\msvc_x86_64\bin</code>.</p>
-                  </details>
-                  <details><summary>Linux</summary>
-                    <p>On a Debian or Ubuntu desktop, run these commands in Terminal. For another distribution, see the <a href="https://gstreamer.freedesktop.org/documentation/installing/on-linux.html" target="_blank" rel="noopener">Linux installation guide</a>.</p>
-                    <pre class="command"><code>sudo apt update
+            <dl class="fact-grid" id="live-rates"><div><dt>Capture rate</dt><dd id="live-capture-fps">—</dd></div><div><dt>Sender rate</dt><dd id="live-fps">—</dd></div><div><dt>Throughput</dt><dd id="live-bitrate">—</dd></div></dl>
+            <dl class="fact-grid"><div><dt>Frames sent</dt><dd id="live-frames">—</dd></div><div><dt>Sender drops</dt><dd id="live-drops">—</dd></div></dl>
+            <p id="live-pressure" class="field-help" role="status"></p>
+            <details class="sender-details"><summary>Sender diagnostics</summary>
+              <dl class="fact-grid"><div><dt>Queue replacements</dt><dd id="live-queue-drops">—</dd></div><div><dt>Network congestion drops</dt><dd id="live-congestion-drops">—</dd></div><div><dt>UDP retries</dt><dd id="live-retries">—</dd></div><div><dt>Skipped by FPS limit</dt><dd id="live-rate-limited">—</dd></div></dl>
+            </details>
+          </div>
+        </article>
+        <details class="panel" id="live-setup">
+          <summary>Set up GStreamer and the receiver connection</summary>
+          <div class="form-body">
+            <p class="field-help">Connect the receiving computer by Ethernet or Wi-Fi. Allow incoming UDP from the Pi on the receiver port you chose.</p>
+            <div class="receiver-setup">
+                <details><summary>Windows</summary>
+                  <p>On the <a href="https://gstreamer.freedesktop.org/download/" target="_blank" rel="noopener">GStreamer download page</a>, open Windows and choose MSVC x86_64 for an Intel or AMD PC, or MSVC arm64 for Windows on Arm. Run the installer and select “Only runtime”.</p>
+                  <p>Open a new Command Prompt. If it cannot find <code>gst-launch-1.0</code>, add the installed folder containing <code>gst-launch-1.0.exe</code> to your user Path, then reopen Command Prompt. A default per-user x64 install uses <code>%LOCALAPPDATA%\Programs\gstreamer\1.0\msvc_x86_64\bin</code>.</p>
+                </details>
+                <details><summary>Linux</summary>
+                  <p>On a Debian or Ubuntu desktop, run these commands in Terminal. For another distribution, see the <a href="https://gstreamer.freedesktop.org/documentation/installing/on-linux.html" target="_blank" rel="noopener">Linux installation guide</a>.</p>
+                  <pre class="command"><code>sudo apt update
 sudo apt install gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-gl gstreamer1.0-x</code></pre>
-                  </details>
-                  <details><summary>macOS</summary>
-                    <p>In Terminal, use <a href="https://brew.sh/" target="_blank" rel="noopener">Homebrew</a> to install GStreamer. If you are installing Homebrew first, follow its “Next steps” to enable the <code>brew</code> command.</p>
-                    <pre class="command"><code>brew install gstreamer</code></pre>
-                  </details>
-                  <details><summary>Verify the installation</summary>
-                    <p>Run each line in Command Prompt or Terminal. The first prints the version. The next two display information about the RTP/JPEG receiver and JPEG decoder. The last opens a short test pattern on the receiving display.</p>
-                    <pre class="command"><code>gst-launch-1.0 --version
+                </details>
+                <details><summary>macOS</summary>
+                  <p>In Terminal, use <a href="https://brew.sh/" target="_blank" rel="noopener">Homebrew</a> to install GStreamer. If you are installing Homebrew first, follow its “Next steps” to enable the <code>brew</code> command.</p>
+                  <pre class="command"><code>brew install gstreamer</code></pre>
+                </details>
+                <details><summary>Verify the installation</summary>
+                  <p>Run each line in Command Prompt or Terminal. The first prints the version. The next two display information about the RTP/JPEG receiver and JPEG decoder. The last opens a short test pattern on the receiving display.</p>
+                  <pre class="command"><code>gst-launch-1.0 --version
 gst-inspect-1.0 rtpjpegdepay
 gst-inspect-1.0 jpegdec
 gst-launch-1.0 videotestsrc num-buffers=90 ! videoconvert ! autovideosink</code></pre>
-                  </details>
-                </div>
-              </li>
-              <li><strong>Start the receiver.</strong> Allow incoming UDP from the Raspberry Pi on the selected port. Run this command in Command Prompt on Windows or Terminal on Linux or macOS. Leave it running while you start the sender.<pre class="command"><code id="receiver-command"></code></pre><button class="button secondary small" type="button" id="copy-command">Copy command</button></li>
-              <li><strong>Start the live stream.</strong> The receiving computer opens a video window when frames arrive. Check the sender rate and drops above. Stop the live stream when finished.</li>
-            </ol>
-          </div></article>
+                </details>
+                <details><summary>Open the console from the receiver</summary>
+                  <p>Open this address in a browser on the same network. Enter the device token if prompted.</p>
+                  <code class="inline-code" id="console-url"></code><p class="field-help" id="loopback-help"></p>
+                </details>
+            </div>
+          </div>
+        </details>
       </section>
       <section id="page-camera" class="settings-page" aria-label="Camera settings" hidden>
         <form id="camera-form" class="panel settings-card">
           <header class="panel-title"><h2>Capture settings</h2><svg><use href="#i-tune"/></svg></header>
           <div class="form-body">
-            <div class="field-pair"><label>Width (px)<input name="width" type="number" min="16" max="8192" step="2" required></label>
-            <label>Height (px)<input name="height" type="number" min="16" max="8192" step="2" required></label></div>
+            <details id="camera-presets" class="camera-presets">
+              <summary>Choose a detected sensor mode</summary>
+              <p class="field-help" id="mode-help">Reading sensor modes…</p>
+              <div id="modes" class="mode-list"></div>
+            </details>
+            <div class="field-pair capture-dimensions"><label>Output width (px)<input name="width" type="number" min="16" max="8192" step="2" required></label>
+            <label>Output height (px)<input name="height" type="number" min="16" max="8192" step="2" required></label></div>
             <div class="field-pair"><label>Target frame rate (fps)<input name="fps" type="number" min="1" max="1000" step="any" required></label>
             <label>Sensor bit depth<select name="sensor_bit_depth" required><option value="0">Automatic</option></select></label></div>
-            <label class="check-line"><input name="osd" type="checkbox">Burn timestamp into captured frames</label>
-            <p class="field-help" id="capture-format"></p>
-          </div><footer class="form-footer"><button class="button primary" type="submit">Save camera settings</button></footer>
+            <label id="camera-overlay" class="check-line"><input name="osd" type="checkbox">Show sensor time on the recorded image</label>
+            <div class="capture-budget" aria-live="polite">
+              <div><h3>Recording format</h3><strong id="capture-format">—</strong></div>
+              <dl class="capture-estimates" id="capture-estimates" hidden>
+                <div><dt>Estimated write rate</dt><dd id="capture-rate">—</dd></div>
+                <div><dt>Space per minute</dt><dd id="capture-space">—</dd></div>
+              </dl>
+              <p class="field-help" id="capture-format-help"></p>
+            </div>
+          </div><footer class="form-footer"><button class="button primary" type="submit">Save camera settings</button><p class="field-help" id="camera-save-state" role="status"></p></footer>
         </form>
         <article class="panel settings-card"><header class="panel-title"><h2>Detected sensor</h2></header>
           <div class="form-body"><dl id="sensor-properties" class="fact-grid"></dl></div></article>
-        <article class="panel settings-card"><header class="panel-title"><h2>Sensor modes</h2></header>
-          <div class="form-body"><p class="field-help" id="mode-help"></p><div id="modes" class="mode-list"></div></div></article>
         <article class="panel settings-card" aria-labelledby="mode-test-title">
           <header class="panel-title"><h2 id="mode-test-title">Test sensor modes</h2></header>
           <div class="form-body">
-            <p class="field-help">Measure capture FPS at the advertised maximum for each selected sensor mode. Starting a recording ends the test.</p>
+            <p class="field-help">Measure the frame rate the camera delivers at its advertised maximum. This test skips recording to disk. Starting a recording ends the test.</p>
             <div class="mode-test-controls">
               <label>Mode to test<select id="mode-test-selection"><option value="">All detected modes</option></select></label>
               <button class="button secondary" id="mode-test-start" type="button">Run test</button>
@@ -245,13 +282,13 @@ gst-launch-1.0 videotestsrc num-buffers=90 ! videoconvert ! autovideosink</code>
         <article class="panel settings-card">
           <header class="panel-title"><h2>Completed recordings</h2><button class="button secondary small" id="clips-refresh" type="button">Refresh recordings</button></header>
           <div class="form-body">
-            <label>Browse recordings from<select id="clips-source"><option value="current">Current recording directory</option><option value="nvme">PCIe NVMe recording directory</option></select></label>
-            <p class="field-help">Browsing a directory leaves the recording destination unchanged.</p>
-            <p class="file-path" id="clips-directory"></p>
+            <div class="clips-location"><label>Browse recordings from<select id="clips-source"><option value="current">Current recording directory</option></select></label>
+              <p class="file-path" id="clips-directory"></p>
+              <a class="text-link" href="#storage">Change where new recordings are saved</a></div>
+            <p id="clips-in-progress" class="notice" role="status" hidden>Recording in progress. The clip will appear here after it finishes.</p>
             <p class="field-help" id="clips-message" role="status"></p>
             <div class="recording-list" id="clips-list"></div>
-            <div class="clips-actions"><button class="button secondary small" id="clips-more" type="button" hidden>Load older recordings</button>
-              <button class="button secondary small danger" id="clips-clean" type="button" hidden>Clean recordings…</button></div>
+            <button class="button secondary small" id="clips-more" type="button" hidden>Load older recordings</button>
           </div>
         </article>
         <details class="panel storage-details" id="mp4-help">
@@ -267,6 +304,14 @@ source .export-venv/bin/activate</code></pre></div>
             <div><p class="field-help">Run this command in that folder using your ZIP filename. By default, the video follows the camera’s sensor timestamps.</p>
               <pre class="command"><code id="mp4-command">python3 render_recording.py recording.zip output.mp4</code></pre>
               <button class="button secondary small" id="copy-mp4-command" type="button">Copy command</button></div>
+          </div>
+        </details>
+        <details class="panel storage-details" id="clips-cleanup" hidden>
+          <summary>Free up space</summary>
+          <div class="form-body">
+            <p class="field-help">Review all completed recordings in the displayed directory for permanent deletion.</p>
+            <p class="field-help" id="clips-delete-lock"></p>
+            <div><button class="button secondary small danger" id="clips-clean" type="button" hidden>Clean recordings…</button></div>
           </div>
         </details>
         <dialog id="cleanup-dialog" aria-labelledby="cleanup-title">
@@ -289,20 +334,23 @@ source .export-venv/bin/activate</code></pre></div>
       </section>
       <section id="page-storage" class="settings-page" aria-label="Storage settings" hidden>
         <article class="panel settings-card">
-          <header class="panel-title"><h2>Recording destination</h2><svg><use href="#i-drive"/></svg></header>
+          <header class="panel-title"><h2>Recording destination</h2><button class="button secondary small" id="refresh-drives" type="button">Refresh drives</button></header>
           <div class="form-body">
-            <div class="active-storage"><h3>Active directory</h3><strong id="storage-active" class="file-path">—</strong>
-              <p id="storage-capacity" class="field-help"></p></div>
+            <div class="active-storage" id="storage-current"><h3>Active directory</h3><strong id="storage-medium"></strong>
+              <p id="storage-active" class="file-path">—</p><p id="storage-capacity" class="field-help"></p>
+              <p id="storage-recovery" class="field-help" hidden>Check that the selected drive is connected and mounted. Refresh drives to see the available destinations.</p>
+              <a class="text-link" id="browse-active" href="#recordings">Browse recordings in this directory</a></div>
             <div class="destination-list">
+              <h3>Save new recordings to</h3>
               <div class="destination-row" id="nvme-ready" hidden><button class="button primary small" id="nvme-use" type="button">Record to NVMe</button><span id="nvme-path" class="file-path"></span></div>
               <div class="destination-row" id="usb-ready" hidden><button class="button primary small" id="usb-use" type="button">Record to USB</button><span id="usb-path" class="file-path"></span></div>
               <div id="storage-choices" class="destination-list"></div>
+              <div id="nvme-setup-shortcut" hidden><button class="button secondary small" id="nvme-open-setup" type="button">Set up NVMe…</button></div>
+              <div id="usb-setup-shortcut" hidden><button class="button secondary small" id="usb-open-setup" type="button">Set up USB…</button></div>
+              <p class="field-help no-destinations">No recording volumes listed. Check the storage devices below.</p>
+              <p id="storage-lock" class="field-help" role="status"></p>
             </div>
-            <div id="nvme-setup-shortcut" hidden><button class="button secondary small" id="nvme-open-setup" type="button">Set up NVMe…</button></div>
-            <div id="usb-setup-shortcut" hidden><button class="button secondary small" id="usb-open-setup" type="button">Set up USB…</button></div>
-            <p id="storage-lock" class="field-help" role="status"></p>
           </div>
-          <footer class="form-footer"><a class="text-link" id="browse-active" href="#recordings">Browse recordings</a></footer>
         </article>
         <details class="panel storage-details" id="storage-custom">
           <summary>Custom recording directory</summary>
@@ -359,41 +407,78 @@ source .export-venv/bin/activate</code></pre></div>
         </form>
       </section>
       <section id="page-network" class="settings-page" aria-label="Network settings" hidden>
-        <form id="network-station-form" class="panel settings-card" autocomplete="off">
-          <header class="panel-title"><h2>Join Wi-Fi network</h2><svg><use href="#i-wifi"/></svg></header>
-          <div class="form-body">
-            <div class="device-list" id="station-connected" hidden></div>
-            <p class="field-help" id="station-status" role="status"></p>
-            <fieldset id="station-fields" class="station-fields" hidden>
-              <label id="station-interface-field" hidden>Wi-Fi interface<select id="station-interface"></select></label>
-              <div><button class="button secondary small" id="station-scan" type="button">Scan networks</button></div>
-              <p class="field-help" id="station-scan-status" role="status"></p>
-              <label>Nearby network<select id="station-network" required>
-                <option value="">Choose a network</option><option value="manual">Enter network name manually…</option>
-              </select></label>
-              <div class="field-pair" id="station-manual" hidden>
-                <label>Network name (SSID)<input id="station-ssid" maxlength="32" required disabled spellcheck="false" autocapitalize="none"></label>
-                <label>Security<select id="station-security" disabled><option value="wpa2-personal">WPA2-Personal</option><option value="wpa3-personal">WPA3-Personal</option><option value="open">Open</option></select></label>
+        <div class="panel network-tasks">
+          <details class="network-task" id="network-join-task" name="network-task">
+            <summary>Join Wi-Fi network<span id="network-join-summary" class="field-help"></span></summary>
+            <form id="network-station-form" autocomplete="off">
+              <div class="form-body">
+                <div class="device-list" id="station-connected" hidden></div>
+                <p class="field-help" id="station-status" role="status"></p>
+                <div id="station-enable-action" hidden><button class="button primary" id="station-enable-wifi" type="button">Enable Wi-Fi</button></div>
+                <fieldset id="station-fields" class="station-fields" hidden>
+                  <label id="station-interface-field" hidden>Wi-Fi interface<select id="station-interface"></select></label>
+                  <div><button class="button secondary small" id="station-scan" type="button">Scan networks</button></div>
+                  <p class="field-help" id="station-scan-status" role="status"></p>
+                  <label>Nearby network<select id="station-network" required>
+                    <option value="">Choose a network</option><option value="manual">Enter network name manually…</option>
+                  </select></label>
+                  <div class="field-pair" id="station-manual" hidden>
+                    <label>Network name (SSID)<input id="station-ssid" maxlength="32" required disabled spellcheck="false" autocapitalize="none"></label>
+                    <label>Security<select id="station-security" disabled><option value="wpa2-personal">WPA2-Personal</option><option value="wpa3-personal">WPA3-Personal</option><option value="open">Open</option></select></label>
+                  </div>
+                  <label class="check-line" id="station-hidden-field" hidden><input id="station-hidden" type="checkbox" disabled>Hidden network</label>
+                  <label id="station-password-field" hidden>Wi-Fi password<input id="station-password" type="password" required disabled autocomplete="new-password"></label>
+                  <div><button class="button primary" id="station-connect" type="submit" disabled>Connect to Wi-Fi</button></div>
+                </fieldset>
+                <p class="field-help" id="station-result" role="status"></p>
               </div>
-              <label class="check-line" id="station-hidden-field" hidden><input id="station-hidden" type="checkbox" disabled>Hidden network</label>
-              <label id="station-password-field" hidden>Wi-Fi password<input id="station-password" type="password" required disabled autocomplete="new-password"></label>
-              <div><button class="button primary" id="station-connect" type="submit" disabled>Connect to Wi-Fi</button></div>
-            </fieldset>
-            <p class="field-help" id="station-result" role="status"></p>
-          </div>
-        </form>
-        <article class="panel settings-card"><header class="panel-title"><h2>Wi-Fi access point</h2><svg><use href="#i-wifi"/></svg></header>
-          <div class="form-body">
-            <p id="network-wifi-message" class="field-help" role="status"></p>
-            <div id="network-active-aps" class="device-list" hidden></div>
-            <label id="network-ap-interface-field" hidden>Access point interface<select id="network-ap-interface"></select></label>
-            <div class="network-actions" id="network-wifi-actions" hidden>
-              <button id="network-enable-wifi" type="button" class="button primary" hidden>Enable Wi-Fi</button>
-              <button id="network-setup-ap" type="button" class="button secondary" hidden>Set up access point</button>
+            </form>
+          </details>
+          <details class="network-task" id="network-ap-task" name="network-task">
+            <summary>Wi-Fi access point<span id="network-ap-summary" class="field-help"></span></summary>
+            <div class="form-body">
+              <p id="network-wifi-message" class="field-help" role="status"></p>
+              <div id="network-active-aps" class="device-list" hidden></div>
+              <label id="network-ap-interface-field" hidden>Access point interface<select id="network-ap-interface"></select></label>
+              <div class="network-actions" id="network-wifi-actions" hidden>
+                <button id="network-enable-wifi" type="button" class="button primary" hidden>Enable Wi-Fi</button>
+                <button id="network-setup-ap" type="button" class="button primary" hidden>Set up access point</button>
+              </div>
             </div>
-          </div></article>
-        <article class="panel settings-card"><header class="panel-title"><h2>Network interfaces</h2><svg><use href="#i-wifi"/></svg></header>
-          <div class="form-body"><div id="adapter-list" class="device-list"></div><p id="network-message" class="field-help" role="status"></p></div></article>
+          </details>
+          <details class="network-task" id="network-connection-task" name="network-task">
+            <summary>Connection settings<span class="field-help">Set a fixed Ethernet address, change IP settings or bridge Ethernet and Wi-Fi.</span></summary>
+            <form id="network-form" autocomplete="off" hidden>
+              <fieldset id="network-fields" class="form-body">
+                <div class="field-pair">
+                  <label>Interface<select name="interface" required></select></label>
+                  <label>Operating mode<select name="mode" required></select></label>
+                </div>
+                <label id="network-radio" hidden>Wi-Fi interface for the bridge<select name="wifi_interface" required disabled></select></label>
+                <div class="field-pair" id="network-station-options" hidden>
+                  <label>Wi-Fi security<select name="security" required disabled><option value="">Choose security</option><option value="wpa2-personal">WPA2-Personal</option><option value="wpa3-personal">WPA3-Personal</option><option value="open">Open</option></select></label>
+                  <label class="check-line"><input name="hidden_ssid" type="checkbox" disabled>Hidden network</label>
+                </div>
+                <div class="field-pair" id="network-wireless" hidden>
+                  <label>Network name (SSID)<input name="ssid" maxlength="32" required disabled autocomplete="off" spellcheck="false"></label>
+                  <label id="network-password-field">Wi-Fi password<input name="password" type="password" required disabled autocomplete="new-password" aria-describedby="network-password-help"></label>
+                </div>
+                <p id="network-password-help" class="field-help" hidden>WPA2-Personal. Use 8–63 printable ASCII characters or a 64-digit hexadecimal key.</p>
+                <label>IPv4 assignment<select name="ipv4_method" required></select></label>
+                <label id="network-address" hidden><span id="network-address-label">Pi IPv4 address / prefix</span><input name="address" placeholder="192.168.10.1/24" required disabled spellcheck="false" autocapitalize="off"></label>
+                <div class="field-pair" id="network-routes" hidden>
+                  <label id="network-gateway">Gateway (optional)<input name="gateway" placeholder="192.168.10.254" disabled spellcheck="false"></label>
+                  <label><span id="network-dns-label">DNS servers (optional)</span><input name="dns" placeholder="192.168.10.254, 192.168.10.253" disabled spellcheck="false"></label>
+                </div>
+                <p id="network-shared-help" class="field-help" hidden>The Pi will assign IPv4 addresses to clients. Use an isolated network where this Pi is the only DHCP server.</p>
+                <div class="network-guidance"><h3>Reconnect after applying</h3><p id="network-reconnect" class="field-help"></p>
+                  <a id="network-target" class="text-link mono" hidden></a></div>
+              </fieldset>
+              <footer class="form-footer"><button id="network-apply" type="submit" class="button primary">Apply temporarily</button>
+                <span class="field-help">Reconnect and choose Keep settings within 120 seconds.</span></footer>
+            </form>
+          </details>
+        </div>
         <article class="panel settings-card"><header class="panel-title"><h2>Wired recovery</h2><span id="network-recovery-state" class="status-chip">Unknown</span></header>
           <div class="form-body">
             <div><strong id="network-recovery-address" class="mono"></strong><p id="network-recovery-message" class="field-help"></p></div>
@@ -401,36 +486,8 @@ source .export-venv/bin/activate</code></pre></div>
               <p id="network-recovery-client" class="field-help"></p>
               <a id="network-recovery-link" class="text-link mono" hidden></a></div>
           </div></article>
-        <form id="network-form" class="panel settings-card" autocomplete="off" hidden>
-          <header class="panel-title"><h2>Connection settings</h2></header>
-          <fieldset id="network-fields" class="form-body">
-            <div class="field-pair">
-              <label>Interface<select name="interface" required></select></label>
-              <label>Operating mode<select name="mode" required></select></label>
-            </div>
-            <label id="network-radio" hidden>Wi-Fi interface for the bridge<select name="wifi_interface" required disabled></select></label>
-            <div class="field-pair" id="network-station-options" hidden>
-              <label>Wi-Fi security<select name="security" required disabled><option value="">Choose security</option><option value="wpa2-personal">WPA2-Personal</option><option value="wpa3-personal">WPA3-Personal</option><option value="open">Open</option></select></label>
-              <label class="check-line"><input name="hidden_ssid" type="checkbox" disabled>Hidden network</label>
-            </div>
-            <div class="field-pair" id="network-wireless" hidden>
-              <label>Network name (SSID)<input name="ssid" maxlength="32" required disabled autocomplete="off" spellcheck="false"></label>
-              <label id="network-password-field">Wi-Fi password<input name="password" type="password" required disabled autocomplete="new-password" aria-describedby="network-password-help"></label>
-            </div>
-            <p id="network-password-help" class="field-help" hidden>WPA2-Personal. Use 8–63 printable ASCII characters or a 64-digit hexadecimal key.</p>
-            <label>IPv4 assignment<select name="ipv4_method" required></select></label>
-            <label id="network-address" hidden><span id="network-address-label">Pi IPv4 address / prefix</span><input name="address" placeholder="192.168.10.1/24" required disabled spellcheck="false" autocapitalize="off"></label>
-            <div class="field-pair" id="network-routes" hidden>
-              <label id="network-gateway">Gateway (optional)<input name="gateway" placeholder="192.168.10.254" disabled spellcheck="false"></label>
-              <label><span id="network-dns-label">DNS servers (optional)</span><input name="dns" placeholder="192.168.10.254, 192.168.10.253" disabled spellcheck="false"></label>
-            </div>
-            <p id="network-shared-help" class="field-help" hidden>The Pi will assign IPv4 addresses to clients. Use an isolated network where this Pi is the only DHCP server.</p>
-            <div class="network-guidance"><h3>Reconnect after applying</h3><p id="network-reconnect" class="field-help"></p>
-              <a id="network-target" class="text-link mono" hidden></a></div>
-          </fieldset>
-          <footer class="form-footer"><button id="network-apply" type="submit" class="button primary">Apply temporarily</button>
-            <span id="network-apply-hint" class="field-help" hidden>Keep settings within 120 seconds to save the access point.</span></footer>
-        </form>
+        <article class="panel settings-card"><header class="panel-title"><h2>Network interfaces</h2><svg><use href="#i-wifi"/></svg></header>
+          <div class="form-body"><div id="adapter-list" class="device-list"></div><p id="network-message" class="field-help" role="status"></p></div></article>
       </section>
     </main>
   </div>

@@ -35,6 +35,8 @@ Run the host checks from the repository root. At first connection, collect the i
 
 ## Recording storage
 
+Check the recording destination in the page header against the saved directory. Simulate a missing or read-only mount while idle and while a recording source is held. The console should explain the storage fault, block a new manual start, and still allow the operator to stop the active request. Restore the mount and verify the next status poll clears the warning.
+
 Read [recording media](../../docs/storage.md) when changing device discovery or target selection. Keep inventory read-only and cached. Each recording start and recovery attempt revalidates the filesystem identity, required mounts, and open destination before creating a session. Use the pinned directory descriptor for every session file, including the final manifest. Exercise a detached drive, a replacement volume at the same path, a mounted SPI volume and raw MTD in fixtures.
 
 Keep USB and PCIe NVMe provisioning in the host-namespace helper. Bind a preparation request to the displayed disk identity and topology, reject stale selections and active/system media, and exercise destructive commands only on explicitly disposable media. Check mounting an existing ext4 separately from whole-disk erasure. In the simulator, choose a ready volume in one click, compare the displayed active directory to the saved configuration and record a clip there. Verify that a typed custom directory takes effect on save and that browsing the SSD leaves the destination intact. Check full and partial downloads in both access modes. Verify that old download URLs fail when their original volume changes.

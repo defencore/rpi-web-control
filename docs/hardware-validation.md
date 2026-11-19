@@ -21,14 +21,14 @@ Check the reported model and arm64 package architecture, OS release, boot volume
 From the workstation, copy the verified archive to the operator's home directory and open an SSH shell on the target.
 
 ```sh
-scp dist/rpi-web-control_0.9.1-1_arm64.deb operator@capture-pi.local:
+scp dist/rpi-web-control_0.10.0-2_arm64.deb operator@capture-pi.local:
 ssh operator@capture-pi.local
 ```
 
 On the Pi, run the following commands from the operator's home directory. When upgrading an existing installation, stop active recordings first.
 
 ```sh
-sudo apt install ./rpi-web-control_0.9.1-1_arm64.deb
+sudo apt install ./rpi-web-control_0.10.0-2_arm64.deb
 systemctl is-active rpi-web-control.service
 sudo openssl x509 -in /etc/rpi-web-control/tls.crt -noout -fingerprint -sha256
 ```
@@ -89,7 +89,7 @@ Start with a local clip at 30 fps. After it passes, use the [live receiver guide
 
 1. Select a supported resolution at 30 fps. Start recording with preview off. Enable preview, open a second viewer, close both viewers, then disable preview. The recording must cover the full interval.
 2. Make a second capture with OSD. Verify the text in recorded frames during playback. Record the effective OSD state at the selected rate.
-3. Repeat with the highest required sensor mode and OSD disabled. Capture at least 60 seconds on the intended destination. Repeat with preview enabled and a slow consumer. Record the requested and measured FPS, number of stored frames, largest frame interval, any dropped-frame indicators, and visible changes to the preview. Include the dimensions when reporting a 240 fps result.
+3. Repeat with the highest required sensor mode and OSD disabled. For a mode above 60 fps, note the estimated MB/s in **Camera → Capture settings**. Capture at least 60 seconds on the intended destination. During recording, note **Video written** and **Average video rate** on Monitor. Repeat with preview enabled and a slow consumer. Record the requested and measured FPS, number of stored frames, largest frame interval, any dropped-frame indicators, and visible changes to the preview. Include the dimensions when reporting a 240 fps result.
 4. Stop recording cleanly. Verify that the sidecar entry count equals the number of complete video frames and that sensor times advance. Inspect a frame near the beginning, middle, and end of the clip.
 5. Repeat the selected test after enough sustained recording to reach thermal equilibrium and fill the storage device's write cache. Observe CPU temperature, throttling, and free space during this interval. A short run measures initial throughput.
 

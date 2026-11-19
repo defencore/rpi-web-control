@@ -52,9 +52,11 @@ class Camera:
         self._state = {"backend": self.backend, "settings": settings, "preview": False,
                        "recording": False, "active": False, "sensor_mode": None,
                        "osd_effective": settings["osd"] and settings["fps"] <= 60, "frames": 0,
+                       "recording_video_bytes": 0,
                        "actual_fps": 0.0, "dropped_frames": 0, "queue_drops": 0,
                        "session": None, "last_error": None}
         self._condition = threading.Condition()
+        self._recording_started_monotonic = 0.0
         self._commands = queue.Queue()
         self._closed = False
         self._sensor = self._record = self._caps = self._jpeg = None
@@ -88,7 +90,13 @@ class Camera:
         with self._condition:
             output = self._live
             mode = self._state["sensor_mode"]
+            video_rate = None
+            if self._state["recording"] and self._state["frames"]:
+                elapsed = time.monotonic() - self._recording_started_monotonic
+                if elapsed >= 1:
+                    video_rate = self._state["recording_video_bytes"] / elapsed
             return {**self._state, "settings": dict(self._state["settings"]),
+                    "recording_video_bytes_per_second": video_rate,
                     "sensor_mode": mode.copy() if mode else None,
                     "mode_test": self._mode_test.status(),
                     "live": output.status() if output else dict(self._last_live)}
@@ -281,7 +289,10 @@ class Camera:
                 path = directory.path if isinstance(directory, RecordingTarget) else directory
                 raise _storage_failure(f"Could not start a recording in {path}", exc) from exc
             raise
-        self._update(recording=True, session=str(self._record.path), frames=0, last_error=None)
+        with self._condition:
+            self._recording_started_monotonic = time.monotonic()
+            self._state.update(recording=True, session=str(self._record.path), frames=0,
+                               recording_video_bytes=self._record.video_bytes, last_error=None)
         return str(self._record.path)
 
     def _stop_recording(self, error=None):
@@ -292,7 +303,7 @@ class Camera:
         except OSError as exc:
             raise _storage_failure(f"Recording stopped. Could not finish saving {record.path}", exc) from exc
         finally:
-            self._update(recording=False)
+            self._update(recording=False, recording_video_bytes=0)
             if not self._state["preview"] and not self._live:
                 self._end_capture()
 
@@ -374,7 +385,7 @@ class Camera:
                     except OSError as cleanup:
                         LOG.error("Recording flush failed: %s", cleanup)
                 else:
-                    self._update(frames=self._record.count)
+                    self._update(frames=self._record.count, recording_video_bytes=self._record.video_bytes)
             if preview:
                 self._preview_due = now + 0.125
                 if jpeg is not None:

@@ -35,8 +35,17 @@ class CameraTests(unittest.TestCase):
         self.assertTrue(self.camera.status()["recording"])
         self.assertIsNone(self.camera.preview_frame(seq, .1))
         self.wait_frames(frames)
+        sample = self.camera.status()
+        size = sample["recording_video_bytes"]
+        self.assertGreater(size, 0)
         self.camera.stop_recording()
-        self.assertFalse(self.camera.status()["active"])
+        idle = self.camera.status()
+        self.assertFalse(idle["active"])
+        self.assertEqual(idle["recording_video_bytes"], 0)
+        self.assertIsNone(idle["recording_video_bytes_per_second"])
+        with (directory / "frames.csv").open() as index:
+            row = list(csv.DictReader(index))[sample["frames"] - 1]
+        self.assertEqual(size, int(row["offset"]) + int(row["size"]))
         return directory
 
     def wait_frames(self, count):
@@ -93,6 +102,25 @@ class CameraTests(unittest.TestCase):
 
     def test_240_fps_profile_writes_raw_frames_and_bypasses_osd(self):
         self.check_artifacts(self.record(240), 240)
+
+    def test_average_video_rate_waits_for_a_full_second(self):
+        self.camera.configure({"fps": 5})
+        before_start = time.monotonic()
+        self.camera.start_recording(Path(self.temp.name), "manual")
+        after_start = time.monotonic()
+        self.wait_frames(1)
+        first = self.camera.status()
+        self.assertGreater(first["recording_video_bytes"], 0)
+        self.assertIsNone(first["recording_video_bytes_per_second"])
+        self.wait_frames(7)
+        before_sample = time.monotonic()
+        sample = self.camera.status()
+        after_sample = time.monotonic()
+        size = sample["recording_video_bytes"]
+        rate = sample["recording_video_bytes_per_second"]
+        self.assertGreaterEqual(rate, size / (after_sample - before_start))
+        self.assertLessEqual(rate, size / (before_sample - after_start))
+        self.camera.stop_recording()
 
     def test_changed_settings_validate_modes_and_recording_state(self):
         caps = self.camera.capabilities()
@@ -247,13 +275,21 @@ class CameraTests(unittest.TestCase):
             self.camera.stop_recording()
         self.assertIn(str(directory), str(raised.exception))
         self.assertFalse(self.camera.status()["recording"])
+        self.assertEqual(self.camera.status()["recording_video_bytes"], 0)
+        self.assertIsNone(self.camera.status()["recording_video_bytes_per_second"])
         self.assertFalse(self.camera.status()["active"])
         self.assertIn("Input/output error", self.camera.status()["last_error"])
         manifest = json.loads((directory / "session.json").read_text())
         self.assertEqual(manifest["status"], "incomplete")
         self.assertIn("Input/output error", manifest["error"])
-        self.camera.start_recording(Path(self.temp.name), "retry")
+        with patch("rpi_web_control.capture.SimSource.next_frame", new=lambda source, timeout: time.sleep(timeout)):
+            self.camera.start_recording(Path(self.temp.name), "retry")
+            restarted = self.camera.status()
+            self.assertTrue(restarted["recording"])
+            self.assertEqual(restarted["recording_video_bytes"], 0)
+            self.assertIsNone(restarted["recording_video_bytes_per_second"])
         self.wait_frames(1)
+        self.assertGreater(self.camera.status()["recording_video_bytes"], 0)
         self.camera.stop_recording()
 
     def test_unsaved_manifest_never_publishes_a_complete_recording(self):

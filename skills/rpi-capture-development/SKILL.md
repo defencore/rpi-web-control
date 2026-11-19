@@ -23,6 +23,7 @@ Inspect `rpi_web_control/capture.py` for completed requests and sensor selection
 - Use the sensor timestamp from the same completed camera request as the stored pixels. Preserve integer nanoseconds. Track write completion, dropped frames, and missing metadata separately.
 - Associate a recording with its boot identity and clock conversion data. Journal timestamps use microseconds. A wall-clock adjustment can affect UTC estimates, and suspend can change the difference between BOOTTIME and MONOTONIC.
 - Compare the video frame count, number of index entries, and actual camera cadence. An FPS setting is a request. A measured FPS claim needs the board, sensor mode, storage path, run duration, timestamps, and observed gaps.
+- Camera status reports the current video file's logical length in `recording_video_bytes`, including Y4M headers. Once at least one frame has been recorded and one monotonic second has elapsed, `recording_video_bytes_per_second` divides that length by elapsed seconds since clip start. Compare a live snapshot with the indexed end offset of its last frame in both formats. Idle status reports zero bytes and a null rate.
 
 [libcamera timing controls](https://github.com/raspberrypi/libcamera/blob/main/src/libcamera/control_ids_core.yaml) · [Journal timestamp fields](https://www.freedesktop.org/software/systemd/man/latest/systemd.journal-fields.html)
 

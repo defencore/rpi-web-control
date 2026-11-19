@@ -31,13 +31,13 @@ From the same checkout, `make check` runs the tests, `make deb` creates the arm6
 
 ## Operating the camera
 
-The page header shows the recording state on every page. Use **Stop recording** for a manual-only clip or **Stop & pause triggers** when a rule is keeping the clip active. Return inputs to rest before choosing **Resume triggers**. On smaller screens, open **Menu** to switch pages.
+Before starting a clip, open **Monitor → Recording destination** and check the drive, directory and free space. Choose **Start recording** in the page header. During the clip, Monitor shows the video data written, its average rate and an estimated time left based on free space. Use **Stop recording** for a manual-only clip or **Stop & pause triggers** when a rule holds the recording. Choose **Browse recordings** to find the finished clip. Return trigger inputs to rest before choosing **Resume triggers**. On smaller screens, open **Menu** to switch pages.
 
 The console compares the Pi's clock with the clock on the device running the browser. If the clocks differ by more than five seconds after allowing for request latency, a warning appears on any page. Check your computer or phone's time and stop any active recording. Selecting **Set Pi time** immediately copies the browser device's time to the Pi. This works over a local connection with no internet access.
 
 | Console page | Controls |
 | --- | --- |
-| Monitor | Toggle preview and check measured capture FPS, frame counts, estimated missed frames, active recording sources and free space at the recording destination. |
+| Monitor | Watch the browser preview, check measured capture FPS and see which sources are holding the current recording. |
 | Recordings | Browse completed sessions, download a ZIP with video and timestamps or choose an individual file. Delete a session or clean completed recordings on a managed external drive. |
 | Stream | Choose a receiver IP, UDP port and optional stream FPS limit. Copy the GStreamer playback command and compare capture rate, sender rate and drop counters. |
 | Camera | Run a capture test for one or all advertised sensor modes, compare measured FPS, and set output size, bit depth, FPS and OSD. Choose or restore a sensor boot profile and request a reboot. [Supported modules and vendor profiles](docs/firmware.md#built-in-camera-profiles) |
@@ -52,7 +52,7 @@ The frame rate setting applies to capture. Browser preview shares the latest JPE
 | Up to 60 fps | Motion JPEG in `video.mjpeg` | Color | Optional, recorded in the pixels |
 | Above 60 fps, including 240 | Planar 8-bit YUV420 in `video.y4m` | Reduced-size grayscale | Bypassed |
 
-High-speed capture selects a sensor mode that supports the requested output and FPS. For 640 × 480 at 240 fps, the raw pixel payload is 110,592,000 bytes/s, roughly 6.64 GB per minute. Allow for headers, filesystem overhead and sustained writing after the drive cache fills. The console reports measured cadence. Throughput on both boards and the exact sensor/drive combination requires the [hardware acceptance procedure](docs/hardware-validation.md).
+When planning a high-speed recording, open **Camera → Capture settings** and edit the output dimensions and target FPS. Above 60 fps, **Estimated write rate** and **Space per minute** update before you save. At 640 × 480 and 240 fps, video alone needs about 111 MB/s or 6.64 GB per minute. Allow extra space for the frame index and headers. At 60 fps and below, JPEG size varies with the scene. Record a sample on the chosen drive to measure its space use. For sustained high-speed recording, test long enough for the drive’s write cache to fill. [Hardware acceptance procedure](docs/hardware-validation.md#capture-and-playback)
 
 Selecting a detected mode sets its sensor bit depth, dimensions and maximum frame rate. For 720p240 on the IMX577, select the 1280 × 720 entry at the desired depth, set the rate to 240 and save. In the API, `camera.sensor_bit_depth` accepts a reported depth or `0` for automatic selection. The active mode appears in camera status and the recording manifest. The depth describes the sensor readout. High-speed YUV420 files use eight bits per component for either sensor depth.
 
@@ -62,7 +62,7 @@ To measure what the attached sensor delivers, stop preview, streaming and record
 
 1. Connect the receiving PC and Pi over Ethernet or Wi-Fi. Open `https://<device-hostname>.local:8080` on the PC or another device such as a phone. Verify the certificate and, if prompted, sign in with the device token. See the [access and credential instructions](docs/package.md).
 2. In **Camera**, choose the desired resolution and FPS. Open **Stream**. Leave **Receiver IP** empty to send video to the device that starts the stream, or enter the receiving PC’s IP address. Set **Receiver UDP port** (default `5004`). For a 60 fps view of a 240 fps recording, set **Stream FPS limit** to `60`. Leave it empty to send at the camera rate.
-3. Run the displayed GStreamer command on the receiving PC and select **Start live stream** in the console. Compare the capture, sender and receiver rates. Closing the browser leaves the sender running. Use **Stop live stream** when finished.
+3. Choose **Copy receiver command** and run it in a terminal on the receiving PC. Select **Start live stream** in the console. The video opens in a player window on that PC when frames arrive. Closing the browser leaves the sender running. Use **Stop live stream** when finished.
 
 The high-speed stream and recording can run together. The live sender uses individually coded JPEG frames, a bounded queue and nonblocking datagrams. End-to-end latency includes exposure, transport, decoding and display. A zero-buffer receiver setting cannot reduce all of these times to zero. On an unreliable link, unreceived UDP packets can cost a full frame. See the [receiver setup and latency measurement guide](docs/live.md).
 
@@ -103,7 +103,7 @@ The API accepts requests without a token by default. When token protection is en
 
 | Method and path | Purpose |
 | --- | --- |
-| GET /api/status | Camera state, configuration, per-rule status, recording owners, disk availability, radio capabilities and `device_realtime_ms` (Pi system realtime clock, integer Unix epoch milliseconds). |
+| GET /api/status | Camera state, configuration, per-rule status, recording owners, disk availability, radio capabilities and `device_realtime_ms` (Pi system realtime clock, integer Unix epoch milliseconds). During recording, `camera.recording_video_bytes` counts bytes in the current video file and `camera.recording_video_bytes_per_second` reports its average growth rate when available. |
 | POST /api/clock | Send a JSON object with `browser_realtime_ms` set to the browser's current `Date.now()` value (integer Unix epoch milliseconds) and `confirm` set to `true`. The service accepts times from 2000-01-01 UTC up to the start of 2100 UTC, exclusive. A recording, held recording claim or scheduled reboot returns HTTP 409. |
 | GET /api/capabilities | Detected camera, sensor properties and available modes |
 | POST /api/camera/mode-test | Start a capture test with `{"action":"start"}`. Add `"mode":{"width":1280,"height":720,"bit_depth":8}` to select one advertised sensor mode. Poll `camera.mode_test` in `GET /api/status` for progress and results. Stop testing with `{"action":"cancel"}`. |

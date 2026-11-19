@@ -1,5 +1,5 @@
 Package: rpi-web-control
-Version: 0.9.1-1
+Version: 0.10.0-2
 Section: video
 Priority: optional
 Architecture: arm64

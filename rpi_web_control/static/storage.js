@@ -1,4 +1,4 @@
-import {byId, setText, element, button, capacity, fact, copyCommand} from "./ui.js";
+import {byId, setText, element, button, capacity, destinationLabel, fact, copyCommand} from "./ui.js";
 
 function cleanupDialog({api, act, busy, notice}, reload) {
   const dialog = byId("cleanup-dialog");
@@ -118,6 +118,10 @@ function recordingsPanel(options, isVisible) {
   const cleanup = cleanupDialog(options, () => load());
 
   function deletionControls() {
+    const section = byId("clips-cleanup");
+    section.hidden = !cleanupAllowed;
+    if (!cleanupAllowed) section.open = false;
+    setText("clips-delete-lock", recordingHeld ? "Stop all recording sources before deleting recordings." : "");
     for (const control of [clean, ...list.querySelectorAll(".clip-delete")]) {
       control.hidden = !cleanupAllowed;
       control.disabled = !cleanupAllowed || !targetId || recordingHeld || busy();
@@ -146,14 +150,23 @@ function recordingsPanel(options, isVisible) {
   function recordingRow(session) {
     const row = element("article", undefined, "clip-row");
     const date = new Date(session.started_at);
-    row.append(element("h3", Number.isNaN(date.getTime()) ? session.name : date.toLocaleString("en-US")));
-    const frames = Number.isSafeInteger(session.frames) ? " · " + session.frames.toLocaleString("en-US") + " frames" : "";
-    row.append(element("p", session.name + frames, "clip-id"));
+    const header = element("div", undefined, "clip-heading");
+    const info = element("div");
+    const title = Number.isNaN(date.getTime()) ? session.name : date.toLocaleString("en-US", {dateStyle: "medium", timeStyle: "long"});
+    info.append(element("h3", title));
+    const summary = [];
+    if (Number.isSafeInteger(session.frames)) summary.push(session.frames.toLocaleString("en-US") + " frames");
+    if (session.files.length && session.files.every(file => Number.isSafeInteger(file.size_bytes))) {
+      summary.push(capacity(session.files.reduce((total, file) => total + file.size_bytes, 0)));
+    }
+    info.append(element("p", summary.join(" · "), "field-help"));
+    header.append(info);
+    row.append(header);
     const archive = downloadLink(session.archive, "button primary small clip-archive");
     if (archive) {
       archive.textContent = "Download recording (.zip)";
       archive.setAttribute("aria-label", "Download recording (.zip) for " + session.name);
-      row.append(archive);
+      header.append(archive);
     }
     const links = element("div", undefined, "clip-links");
     for (const file of session.files) {
@@ -163,16 +176,13 @@ function recordingsPanel(options, isVisible) {
       link.setAttribute("aria-label", "Download " + file.name + " from " + session.name);
       links.append(link);
     }
-    if (archive && links.childElementCount) {
-      const details = element("details", undefined, "clip-details");
-      details.append(element("summary", "Individual files"), links);
-      row.append(details);
-    } else {
-      row.append(links);
-    }
+    const details = element("details", undefined, "clip-details");
+    details.append(element("summary", "Files and actions"), element("p", session.name, "clip-id"), links);
+    details.open = !archive;
     const remove = button("Delete recording…", () => review(session.name), "button secondary small danger clip-delete");
     remove.setAttribute("aria-label", "Delete recording " + session.name);
-    row.append(remove);
+    details.append(remove);
+    row.append(details);
     return row;
   }
 
@@ -180,6 +190,7 @@ function recordingsPanel(options, isVisible) {
     if (!directories || !isVisible() || (append && !cursor)) return;
     const request = ++ticket;
     const query = new URLSearchParams({source: source.value});
+    byId("clips-in-progress").hidden = !recording || directories[source.value] !== directories.current;
     if (append) {
       query.set("cursor", cursor);
       query.set("target_id", targetId);
@@ -194,6 +205,7 @@ function recordingsPanel(options, isVisible) {
       targetId = cursor = null;
       setText("clips-directory", directories[source.value] || "");
     }
+    byId("clips-message").classList.remove("danger");
     setText("clips-message", "Loading recordings…");
     try {
       const result = await api("recordings?" + query.toString());
@@ -214,7 +226,10 @@ function recordingsPanel(options, isVisible) {
         ? "No completed recordings on this page. Load older recordings to continue."
         : "No completed recordings in this directory.");
     } catch (error) {
-      if (request === ticket) setText("clips-message", error.message);
+      if (request === ticket) {
+        byId("clips-message").classList.add("danger");
+        setText("clips-message", "Could not load recordings. " + error.message);
+      }
     } finally {
       if (request === ticket) byId("clips-refresh").disabled = more.disabled = false;
     }
@@ -223,7 +238,9 @@ function recordingsPanel(options, isVisible) {
   byId("clips-refresh").addEventListener("click", () => load());
   clean.addEventListener("click", () => review());
   byId("copy-mp4-command").addEventListener("click", () => copyCommand(byId("mp4-command"), notice));
-  byId("browse-active").addEventListener("click", () => { source.value = "current"; });
+  for (const id of ["browse-active", "monitor-browse"]) {
+    byId(id).addEventListener("click", () => { source.value = "current"; });
+  }
   source.addEventListener("change", () => load());
   more.addEventListener("click", () => load(true));
   return {
@@ -233,14 +250,12 @@ function recordingsPanel(options, isVisible) {
       const previous = source.value;
       const path = directories?.[previous];
       if (!directories || ["current", "nvme", "usb", "default"].some(key => next[key] !== directories[key])) {
-        const currentMedium = next.current === next.nvme ? " · PCIe NVMe" : next.current === next.usb ? " · USB"
-          : next.current === next.default ? " · Default" : "";
-        const names = {current: "Current recording directory" + currentMedium,
+        const names = {current: "Current destination · " + destinationLabel(next),
           nvme: "PCIe NVMe recording directory", usb: "USB recording directory", default: "Default recording directory"};
         const seen = new Set();
         const options = [];
         for (const key of ["current", "nvme", "usb", "default"]) {
-          if (!(key in next) || seen.has(next[key])) continue;
+          if (!next[key] || seen.has(next[key])) continue;
           seen.add(next[key]);
           options.push(new Option(names[key], key));
         }
@@ -258,6 +273,7 @@ function recordingsPanel(options, isVisible) {
       directories = next;
       recording = camera.recording;
       session = camera.session;
+      byId("clips-in-progress").hidden = !recording || next[source.value] !== next.current;
       if (changed) load();
     },
     clear() {
@@ -267,6 +283,7 @@ function recordingsPanel(options, isVisible) {
       recording = false;
       directories = cursor = targetId = session = null;
       source.value = "current";
+      byId("clips-in-progress").hidden = true;
       ticket++;
       list.replaceChildren();
       more.hidden = true;
@@ -303,7 +320,9 @@ function drivePanel(medium, label, {api, act, busy, chooseDestination}, refreshP
     for (const mount of control("volumes").querySelectorAll("button")) mount.disabled = blocked;
     confirmation.disabled = blocked;
     control("prepare").disabled = blocked || !disk?.can_prepare || confirmation.value !== disk.device;
-    control("use").disabled = blocked || !latest?.ready || healthyDirectory === latest.directory;
+    const selected = latest?.ready && healthyDirectory === latest.directory;
+    control("use").disabled = blocked || !latest?.ready || selected;
+    write("use", selected ? label + " selected" : "Record to " + label);
     write("activity", applying ? "Setting up the " + label + " disk…" : latest?.busy ? label + " setup is in progress."
       : recording ? "Finish the active recording before changing storage." : "");
   }
@@ -454,12 +473,18 @@ export function setupStoragePanels(options, inventory) {
   const recordings = recordingsPanel(options, () => page === "recordings");
   const drives = [drivePanel("nvme", "NVMe", options, refreshPage, inventory),
     drivePanel("usb", "USB", options, refreshPage, inventory)];
+  const refreshDrives = byId("refresh-drives");
 
-  function refreshPage() {
+  async function refreshPage() {
     if (page === "recordings") return recordings.load();
-    if (page === "storage") return Promise.all([...drives.map(drive => drive.load()), inventory.load()]);
+    if (page === "storage") {
+      refreshDrives.disabled = true;
+      try { await Promise.all([...drives.map(drive => drive.load()), inventory.load()]); }
+      finally { refreshDrives.disabled = false; }
+    }
   }
 
+  refreshDrives.addEventListener("click", refreshPage);
   return {
     open(nextPage) {
       if (page === "recordings" && nextPage !== page) recordings.leave();
@@ -467,6 +492,11 @@ export function setupStoragePanels(options, inventory) {
       refreshPage();
     },
     update(snapshot) {
+      const paths = snapshot.recording_directories || {current: snapshot.config.storage.directory};
+      const unavailable = Boolean(snapshot.storage?.error);
+      setText("storage-medium", destinationLabel(paths) + (unavailable ? " · Unavailable" : ""));
+      byId("storage-current").classList.toggle("unavailable", unavailable);
+      byId("storage-recovery").hidden = !unavailable;
       recordings.update(snapshot);
       for (const drive of drives) drive.update(snapshot);
     },

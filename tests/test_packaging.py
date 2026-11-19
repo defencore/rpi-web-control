@@ -29,20 +29,48 @@ class PackageTests(unittest.TestCase):
                 (tools / name).symlink_to(shutil.which(name))
             for name, body in {
                 "systemctl": 'if [ "$1" = is-active ]; then echo active; else echo "$@"; fi',
-                "journalctl": 'echo "$@"; exit 1',
+                "journalctl": '''
+                    case "$*" in
+                        *"-k -b -1 -n 1 -o json --output-fields=_BOOT_ID")
+                            [ "$PREVIOUS_BOOT" != missing ] || exit 1
+                            echo '{"_BOOT_ID":"previous"}' ;;
+                        *"-k -b 0 -n 1 -o json --output-fields=_BOOT_ID")
+                            echo '{"_BOOT_ID":"current"}' ;;
+                        *"-k -b -1 -n 12 --grep="*)
+                            [ "$PREVIOUS_BOOT" = faults ] || exit 1
+                            case "$*" in
+                                *"controller is down"*) echo 'nvme nvme0: controller is down' ;;
+                                *"ext4"*) echo 'EXT4-fs error: aborted journal' ;;
+                            esac ;;
+                        *"-k -b 0 -n 12 --grep="*) exit 1 ;;
+                        *) echo "$@"; exit 1 ;;
+                    esac''',
                 "rpicam-hello": 'echo "CAMERA PROBED"',
             }.items():
                 program = tools / name
                 program.write_text(f"#!/bin/sh\n{body}\n")
                 program.chmod(0o755)
-            result = subprocess.run(["sh", "-s", "--", "--diagnostics"], executable=shutil.which("sh"),
-                                    input=script, capture_output=True, env={"PATH": tmp}, timeout=10)
-        # The mock has no dpkg, so the inventory cannot confirm an arm64 target.
-        self.assertEqual(result.returncode, 2, result.stderr)
-        report = result.stdout.decode()
+            for previous in ("faults", "clear", "missing"):
+                with self.subTest(previous=previous):
+                    result = subprocess.run(["sh", "-s", "--", "--diagnostics"], executable=shutil.which("sh"),
+                                            input=script, capture_output=True,
+                                            env={"PATH": tmp, "PREVIOUS_BOOT": previous}, timeout=10)
+                    # The mock has no dpkg, so the final compatibility check returns 2.
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    report = result.stdout.decode()
+                    self.assertIn("Could not confirm a Pi 5 or CM5", report)
+                    current, previous_section = report.split("Recording drive faults (previous boot", 1)
+                    previous_section = previous_section.split("IPv4 routes", 1)[0]
+                    self.assertIn("No matching recording drive faults found.", current)
+                    if previous == "faults":
+                        self.assertIn("nvme nvme0: controller is down", previous_section)
+                        self.assertIn("EXT4-fs error: aborted journal", previous_section)
+                    elif previous == "clear":
+                        self.assertIn("No matching recording drive faults found.", previous_section)
+                    else:
+                        self.assertIn("No accessible kernel journal for the previous boot.", previous_section)
         self.assertNotIn("CAMERA PROBED", report)
         self.assertIn("Recording drive faults", report)
-        self.assertIn("controller is down", report)
         self.assertIn("apt-get is unavailable.", report)
         self.assertIn("Filesystem space", report)
         self.assertIn("-n 80 -u rpi-web-control.service", report)

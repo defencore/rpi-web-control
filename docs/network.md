@@ -1,6 +1,6 @@
 # Ethernet and Wi-Fi
 
-Open **Network** to see the interfaces and IPv4 addresses on the Pi. Under **Connection settings**, select the interface by its reported name and choose its operating mode. A wired-only CM5 can configure Ethernet. Station mode requires a managed Wi-Fi radio. To host an access point, enable the radio, configure its regulatory country in Raspberry Pi OS and choose an adapter with AP support.
+On **Network**, expand **Join Wi-Fi network** to connect the Pi to a router, **Wi-Fi access point** to let a phone or laptop join the Pi directly, or **Connection settings** to set a fixed Ethernet address or create a bridge. **Network interfaces** lists the current addresses. A wired-only CM5 can configure Ethernet. Joining a Wi-Fi network requires a managed radio. To host an access point, enable the radio, configure its regulatory country in Raspberry Pi OS and choose an adapter with AP support.
 
 | Connection | When to use it | Where the Pi's IPv4 address belongs |
 | --- | --- | --- |
@@ -77,7 +77,7 @@ Reserve the recovery address for the Pi and exclude it from DHCP allocation on a
 
 ## Give a wired Pi a fixed address
 
-1. Select the managed **Interface**, for example `eth0`, and choose **Ethernet** as the **Operating mode**. For automatic addressing, choose **DHCP client** to obtain the Pi's IPv4 address from the LAN's DHCP server. An optional DNS override replaces the servers supplied by DHCP.
+1. Expand **Network → Connection settings**, select the managed **Interface**, for example `eth0`, and choose **Ethernet** as the **Operating mode**. For automatic addressing, choose **DHCP client** to obtain the Pi's IPv4 address from the LAN's DHCP server. An optional DNS override replaces the servers supplied by DHCP.
 2. For the fixed address in this example, select **Static address** and enter `192.168.55.100/24`. Check that the address is unused and reserved for the Pi on this LAN. If the Pi needs to reach other networks or resolve hostnames, supply the LAN's gateway and DNS server addresses. Leave those fields empty for a direct, offline connection.
 3. Select **Apply temporarily**. On a direct cable without DHCP, give the workstation another unused address on the subnet, for example `192.168.55.10/24`. Open `https://192.168.55.100:8080` and use **Keep settings** to confirm.
 

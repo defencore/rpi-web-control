@@ -111,11 +111,11 @@ Choose an available BCM line from 0–27 routed to the header on your board. A c
 
 **Recording starts as soon as the rule is enabled.** Check the button at rest. Using an NO pushbutton with an NC hold rule makes the open, released button the active input. Edit that rule, choose NO, then save and test a press and release.
 
-**The button stops its rule but the clip continues.** Check the sources in **Monitor** and the rules marked **Holding recording** in **Triggers**. To end the clip immediately while a trigger holds it, choose **Stop & pause triggers**. This releases the recording requests and pauses all automatic rules. For a manual-only clip, use **Stop recording**.
+**The button stops its rule but the clip continues.** Check the sources listed beside the recording controls at the top of the page. Open **Triggers** to see which rules show **Holding recording**. To end the clip immediately while a trigger holds it, choose **Stop & pause triggers**. This releases the recording requests and pauses all automatic rules. For a manual-only clip, use **Stop recording**.
 
 To pause only the automatic rules while keeping a manual recording running, choose **Triggers → Pause triggers**. To resume automatic operation, first return the inputs to their resting state and choose **Resume triggers**. The service also resumes saved rules when it restarts. An active hold input can immediately start a new clip. To turn off just one rule across restarts, choose **Disable rule** on a row marked **Holding recording**, or edit the rule, clear **Enable this rule** and choose **Save rule**. The edit path also works on older versions. Release any remaining manual hold to close the clip.
 
-**The console reports `[Errno 5] Input/output error` with a session name.** Write down the session name and check the recording destination before starting another clip. [Troubleshoot a recording I/O error](storage.md#troubleshoot-a-recording-io-error)
+**The console reports `[Errno 5] Input/output error` with a session name.** Write down the session name. Open **Storage**, choose **Refresh drives** and check the selected drive and directory before starting another clip. [Troubleshoot a recording I/O error](storage.md#troubleshoot-a-recording-io-error)
 
 ## Numeric sensor
 

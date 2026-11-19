@@ -18,16 +18,32 @@ else
     model=$(tr -d '\000' < "$model_file")
 fi
 
+run_limited() {
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 20 "$@"
+    else
+        "$@"
+    fi
+}
+
 inspect() {
     if ! command -v "$1" >/dev/null 2>&1; then
         printf '%s is unavailable.\n' "$1"
         return
     fi
-    if command -v timeout >/dev/null 2>&1; then
-        timeout 20 "$@" 2>&1 || printf '%s did not complete successfully.\n' "$1"
-    else
-        "$@" 2>&1 || printf '%s did not complete successfully.\n' "$1"
-    fi
+    run_limited "$@" 2>&1 || printf '%s did not complete successfully.\n' "$1"
+}
+
+recording_faults() {
+    for pattern in '(nvme|pcie|usb).*(controller is down|reset|timeout|disabling device|disconnect)' \
+                   '(ext4|jbd2|buffer I/O|blk_update_request).*(error|read.only|aborted|lost|shut.?down)|I/O error, dev (nvme|sd|mmcblk)'; do
+        if entries=$(run_limited journalctl --quiet --no-pager -k -b "$1" -n 12 --grep="(?i)$pattern" 2>&1); then
+            [ -z "$entries" ] || printf '%s\n' "$entries"
+        elif [ "$?" -ne 1 ] || [ -n "$entries" ]; then
+            printf 'Could not read matching kernel entries. %s\n' "$entries"
+            return
+        fi
+    done
 }
 
 arch=$(dpkg --print-architecture 2>/dev/null) || arch=unknown
@@ -94,14 +110,24 @@ if [ "$diagnostics" = yes ]; then
     done
     inspect df -hP "$@"
 
-    printf '\nRecording drive faults (current boot, visible to this account)\n'
+    printf '\nRecording drive mounts (current state)\n'
     if command -v findmnt >/dev/null 2>&1; then
         for dir in /srv/rpi-web-control-nvme /srv/rpi-web-control-usb; do
             findmnt -rn -o SOURCE,TARGET,OPTIONS --mountpoint "$dir" || printf '%s has no separate mount.\n' "$dir"
         done
     fi
-    inspect journalctl --no-pager -k -b -n 12 --grep='(?i)(nvme|pcie|usb).*(controller is down|reset|timeout|disabling device|disconnect)'
-    inspect journalctl --no-pager -k -b -n 12 --grep='(?i)(ext4|jbd2|buffer I/O|blk_update_request).*(error|read.only|aborted|lost)'
+    for boot in 0 -1; do
+        case "$boot" in 0) label=current ;; -1) label=previous ;; esac
+        printf '\nRecording drive faults (%s boot, visible to this account)\n' "$label"
+        if ! command -v journalctl >/dev/null 2>&1; then
+            printf 'journalctl is unavailable.\n'
+        elif [ -z "$(run_limited journalctl --quiet --no-pager -k -b "$boot" -n 1 -o json --output-fields=_BOOT_ID 2>/dev/null)" ]; then
+            printf 'No accessible kernel journal for the %s boot.\n' "$label"
+        else
+            faults=$(recording_faults "$boot")
+            printf '%s\n' "${faults:-No matching recording drive faults found.}"
+        fi
+    done
 
     printf '\nIPv4 routes, DNS and bridge ports\n'
     inspect ip -4 route show

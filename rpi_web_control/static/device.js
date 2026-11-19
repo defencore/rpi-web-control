@@ -80,8 +80,10 @@ function livePanel({api, act, notice, busy}) {
 
   return function update(snapshot, caps) {
     const cam = snapshot.camera;
+    const wasActive = Boolean(current?.enabled);
     current = cam.live;
     const active = Boolean(current?.enabled);
+    if (active !== wasActive) byId("live-player").open = !active;
     const mode = cam.settings || snapshot.config.camera;
     const supportedSize = [mode.width, mode.height].every(n => n <= 2040 && n % 8 === 0);
     browserHost = snapshot.client_address || "";
@@ -90,7 +92,6 @@ function livePanel({api, act, notice, busy}) {
     portInput.disabled = active;
     fpsInput.disabled = active;
     byId("live-receiver-fields").hidden = active;
-    byId("live-host-help").hidden = active;
     byId("live-destination").hidden = !active;
     byId("live-active-limit").hidden = !active;
     if (active) {
@@ -101,12 +102,11 @@ function livePanel({api, act, notice, busy}) {
     setText("live-mode", mode.width + " × " + mode.height + " at " + numeric.format(mode.fps) + " fps");
     setText("live-state", active ? "Sending" : "Off");
     byId("live-state").classList.toggle("live", active);
-    let limit = "Leave the FPS limit blank to match the camera. A lower limit reduces bandwidth while recording at the selected camera rate.";
+    let limit = "";
     if (!current) limit = "The service has no live sender available.";
     else if (caps?.available === false) limit = caps.error || "No camera is available.";
     else if (cam.mode_test?.state === "running") limit = "Finish the sensor mode test before starting the live stream.";
     else if (!supportedSize) limit = "For RTP/JPEG, choose dimensions divisible by 8, up to 2040 × 2040.";
-    else if (active) limit = "If sender drops keep rising, stop the live stream and lower its FPS limit. Local recording can continue.";
     setText("live-limit", limit);
     const toggle = byId("live-toggle");
     toggle.disabled = busy() || (!active && (!current || !supportedSize || caps?.available === false || cam.mode_test?.state === "running"));
@@ -122,6 +122,16 @@ function livePanel({api, act, notice, busy}) {
       setText(id, Number.isFinite(value) ? numeric.format(value) + unit : "—");
     }
     setText("live-error", current?.last_error || "");
+    byId("live-statistics").hidden = !current?.host;
+    byId("live-rates").hidden = !active;
+    setText("live-stats-title", active ? "Stream performance" : "Last stream");
+    let pressure = "";
+    if (active && current.congestion_drops > 0) {
+      pressure = "The network was busy and the Pi dropped frames. If sender drops keep rising, stop the stream and lower its FPS limit.";
+    } else if (active && current.queue_drops > 0) {
+      pressure = "The sender replaced queued frames to keep up with capture. If sender drops keep rising, try a lower stream FPS limit.";
+    }
+    setText("live-pressure", pressure);
     updateCommand();
   };
 }

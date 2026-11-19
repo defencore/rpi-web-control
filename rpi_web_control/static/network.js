@@ -159,6 +159,7 @@ function adapterCard(adapter, recovery) {
 export function setupNetworkPanel({api, act, notice, busy}) {
   const form = byId("network-form");
   const fields = form.elements;
+  const connectionTask = byId("network-connection-task");
   const apInterface = byId("network-ap-interface");
   let devices = [];
   let recovery = null;
@@ -193,8 +194,10 @@ export function setupNetworkPanel({api, act, notice, busy}) {
     const enable = byId("network-enable-wifi");
     const setup = byId("network-setup-ap");
     enable.hidden = !radios.length || hardwareOff || !softwareOff;
+    byId("station-enable-action").hidden = enable.hidden;
     setup.hidden = hardwareOff || softwareOff || !status.available || !choices.length;
     enable.disabled = setup.disabled = Boolean(pending) || busy();
+    byId("station-enable-wifi").disabled = enable.disabled;
     byId("network-wifi-actions").hidden = enable.hidden && setup.hidden;
     const preferred = choices.find(row => row.name === apInterface.value) ||
       choices.find(row => row.mode === "ap") || choices.find(row => row.state === "disconnected") || choices[0];
@@ -308,7 +311,6 @@ export function setupNetworkPanel({api, act, notice, busy}) {
     byId("network-apply").disabled = applying || Boolean(pending) || !adapter || !allowedModes.includes(mode)
       || (bridge && !radios.some(item => item.name === fields.wifi_interface.value));
     setText("network-apply", mode === "ap" ? "Start access point" : "Apply temporarily");
-    byId("network-apply-hint").hidden = mode !== "ap";
     guidance();
     validate();
   }
@@ -341,6 +343,8 @@ export function setupNetworkPanel({api, act, notice, busy}) {
       inventoryKey = key;
       byId("adapter-list").replaceChildren(...devices.map(adapter => adapterCard(adapter, recovery)));
       const aps = devices.filter(row => row.type === "wifi" && row.mode === "ap" && row.state === "connected");
+      setText("network-ap-summary", aps.length ? "Hosting " + aps.map(row => row.ssid || row.name).join(", ")
+        : "Connect a phone or laptop directly to the Pi over Wi-Fi.");
       byId("network-active-aps").hidden = !aps.length;
       byId("network-active-aps").replaceChildren(...aps.map(ap => activeAccessPoint(ap, devices, recovery)));
       station.showConnected(devices);
@@ -349,6 +353,7 @@ export function setupNetworkPanel({api, act, notice, busy}) {
     wifiControls(status);
     station.update(status);
     form.hidden = !status.available || !available.length;
+    connectionTask.hidden = form.hidden;
     setText("network-message", status.message || (form.hidden ? "No managed Ethernet or Wi-Fi interface is available." : ""));
     const names = available.map(item => item.name);
     const selected = fields.interface.value;
@@ -373,10 +378,12 @@ export function setupNetworkPanel({api, act, notice, busy}) {
 
   fields.interface.addEventListener("change", () => editOptions(true));
   apInterface.addEventListener("change", updateApAction);
-  byId("network-enable-wifi").addEventListener("click", () => {
+  function enableWifi() {
     if (busy() || pending) return;
     act(async () => update(await api("network", {action: "enable_wifi"})), "Wi-Fi enabled.");
-  });
+  }
+  byId("network-enable-wifi").addEventListener("click", enableWifi);
+  byId("station-enable-wifi").addEventListener("click", enableWifi);
   byId("network-setup-ap").addEventListener("click", () => {
     if (busy() || pending) return;
     const radio = apChoices().find(row => row.name === apInterface.value);
@@ -391,7 +398,8 @@ export function setupNetworkPanel({api, act, notice, busy}) {
       fields.address.value = suggestedApAddress(devices, radio.name, recovery);
     }
     editOptions();
-    form.scrollIntoView({block: "start"});
+    connectionTask.open = true;
+    connectionTask.scrollIntoView({block: "start"});
     fields.ssid.focus({preventScroll: true});
   });
   fields.mode.addEventListener("change", () => editOptions(false, true));

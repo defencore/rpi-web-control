@@ -46,6 +46,7 @@ class Recording:
             if target is None:
                 os.close(parent_fd)
         self.count = 0
+        self.video_bytes = 0
         self.raw = settings["fps"] > 60
         self.files = contextlib.ExitStack()
         try:
@@ -72,7 +73,7 @@ class Recording:
                 rate = Fraction(str(settings["fps"])).limit_denominator(100000)
                 header = (f"YUV4MPEG2 W{settings['width']} H{settings['height']} "
                           f"F{rate.numerator}:{rate.denominator} Ip A1:1 C420jpeg\n")
-                self.video.write(header.encode("ascii"))
+                self.video_bytes = self.video.write(header.encode("ascii"))
             self.flush_deadline = time.monotonic() + 1
         except Exception as exc:
             try:
@@ -108,8 +109,9 @@ class Recording:
             frame.write_yuv(self.video)
         else:
             self.video.write(jpeg)
-        self.rows.writerow((self.count, frame.sensor_ns, mono, real, start, self.video.tell() - start,
-                            uncertainty))
+        end = self.video.tell()
+        self.rows.writerow((self.count, frame.sensor_ns, mono, real, start, end - start, uncertainty))
+        self.video_bytes = end
         self.count += 1
         if time.monotonic() >= self.flush_deadline:
             self.video.flush()

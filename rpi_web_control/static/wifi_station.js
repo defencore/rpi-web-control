@@ -108,6 +108,8 @@ export function setupStation({api, act, busy, apply, consoleUrl}) {
   function showConnected(devices) {
     const group = byId("station-connected");
     const joined = devices.filter(row => row.type === "wifi" && row.mode === "station" && row.state === "connected");
+    setText("network-join-summary", joined.length ? "Connected to " + joined.map(row => row.ssid || row.name).join(", ")
+      : "Connect the Pi to a router and keep the Ethernet address.");
     group.hidden = !joined.length;
     group.replaceChildren(...joined.map(row => {
       const info = element("div", undefined, "network-guidance");

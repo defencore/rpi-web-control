@@ -46,3 +46,11 @@ export function capacity(bytes) {
   const i = Math.min(units.length - 1, Math.max(0, Math.floor(Math.log2(bytes || 1) / 10)));
   return sizes.format(bytes / (1024 ** i)) + " " + units[i];
 }
+
+export function destinationLabel(paths) {
+  for (const [medium, label] of [["nvme", "PCIe NVMe"], ["usb", "USB drive"]]) {
+    const root = paths[medium];
+    if (root && (paths.current === root || paths.current.startsWith(root + "/"))) return label;
+  }
+  return paths.current === paths.default ? "Default recording directory" : "Custom directory";
+}
