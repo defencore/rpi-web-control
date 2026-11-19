@@ -1,0 +1,19 @@
+[Unit]
+Description=RPi Web Control device clock helper
+
+[Service]
+ExecStart=/usr/bin/python3 -I /usr/lib/rpi-web-control/clock-helper.py
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+RuntimeMaxSec=8
+DynamicUser=yes
+User=rpi-web-clock
+CapabilityBoundingSet=CAP_SYS_TIME
+AmbientCapabilities=CAP_SYS_TIME
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX

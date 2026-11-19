@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+if [ "$1" = remove ] && [ -d /run/systemd/system ]; then
+    deb-systemd-invoke stop rpi-web-control-recovery.timer rpi-web-control-recovery.service >/dev/null
+    if [ -d /run/rpi-web-control-recovery ]; then
+        /usr/bin/python3 -I /usr/lib/rpi-web-control/recovery-helper.py stop
+    fi
+    deb-systemd-invoke stop rpi-web-control.service rpi-web-control-network.socket rpi-web-control-firmware.socket rpi-web-control-nvme.socket rpi-web-control-clock.socket >/dev/null
+fi
+exit 0

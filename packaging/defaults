@@ -1,0 +1,19 @@
+# Restart rpi-web-control.service after changing these settings.
+RPI_CONTROL_HOST=0.0.0.0
+RPI_CONTROL_PORT=8080
+RPI_CONTROL_STATE=/var/lib/rpi-web-control
+# Set to 1 to require the device token for the web console and API.
+RPI_CONTROL_REQUIRE_TOKEN=0
+RPI_CONTROL_TOKEN_FILE=/etc/rpi-web-control/token
+RPI_CONTROL_TLS_CERT=/etc/rpi-web-control/tls.crt
+RPI_CONTROL_TLS_KEY=/etc/rpi-web-control/tls.key
+# Direct-cable recovery. Set the address to off to disable it.
+# The recovery service reads these two settings on each timer run.
+RPI_CONTROL_RECOVERY_ADDRESS=192.168.55.100/24
+RPI_CONTROL_RECOVERY_INTERFACE=auto
+# Separate absolute recording roots with colons. Provision and mount external
+# roots before use, granting the service user permission to write in them.
+RPI_CONTROL_STORAGE_ROOTS=/var/lib/rpi-web-control/recordings
+# For removable storage, list the mountpoints that must be mounted before their
+# recording directories can be selected or opened, for example /srv/camera-ssd.
+RPI_CONTROL_REQUIRED_MOUNTS=

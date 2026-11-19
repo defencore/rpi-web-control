@@ -1,0 +1,10 @@
+[Unit]
+Description=Check the wired recovery address
+
+[Timer]
+OnBootSec=3s
+OnUnitInactiveSec=5s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

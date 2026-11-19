@@ -1,0 +1,20 @@
+[Unit]
+Description=RPi Web Control sensor profile helper
+
+[Service]
+ExecStart=/usr/bin/python3 -I /usr/lib/rpi-web-control/firmware-helper.py
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+StateDirectory=rpi-web-control-firmware
+StateDirectoryMode=0700
+UMask=0077
+RuntimeMaxSec=20
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ReadWritePaths=-/boot/firmware
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+RestrictAddressFamilies=AF_UNIX

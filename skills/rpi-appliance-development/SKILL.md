@@ -1,0 +1,47 @@
+---
+name: rpi-appliance-development
+description: Use when extending rpi-web-control trigger rules, recording ownership, persisted settings, HTTP endpoints, Wi-Fi roles, systemd units, or Debian package contents.
+---
+
+# Appliance development
+
+Begin in `rpi_web_control/application.py` for recording ownership and `rpi_web_control/config.py` for settings validation and persistence. Follow each settings change from the English browser control through validation, persisted configuration, runtime state and the next service restart.
+
+## Add a recording trigger
+
+1. Read [trigger rules](../../docs/triggers.md) and the existing adapter lifecycle. Give each configured rule a stable ID and define when it claims or releases recording.
+2. Validate the complete configuration before taking ownership of a device. Use finite ranges, explicit device support, and a clear idle/error state. Hardware imports belong inside the relevant adapter.
+3. Issue state transitions only on changes. A rule that stops, fails, or disappears must release its own claim. Another active rule or manual recording can still own the recording.
+4. Test two overlapping sources, a missing device, rule replacement, and service shutdown. Check that status identifies the failing rule and the other source continues recording.
+5. Add the rule fields to the browser editor and schema documentation. Check defaults and unit labels against the backend.
+
+## Change a web or packaging boundary
+
+- When changing the browser, exercise a detected sensor mode, an unsaved form across a status refresh, and switching preview off during a recording. Check both desktop and narrow mobile widths.
+- Keep the Stream page receiver setup in sync with [the workstation guide](../../docs/live.md). Verify the plug-in checks for each listed OS and generate the receive command using the selected destination's address family and UDP port. Check automatic delivery to the HTTPS peer and an explicit IPv4 or IPv6 receiver on another device. Exercise a start with `max_fps` omitted and with a limit. Verify that status refreshes preserve pending edits to the receiver and limit and that per-stream counters match the API.
+- Apply the configured token policy to reads and writes. Open a fresh browser session with package defaults and verify that the monitor opens without prompting for a token or offering sign-out. With token sign-in enabled, check the prompt, sign-in, sign-out and session expiry. Keep origin checks in both modes. Validate finite numeric values, accepted keys, and allowed storage paths on the server. Never use a web-supplied value as executable code.
+- Keep host clock changes in the dedicated clock helper. Preserve integer Unix epoch milliseconds for both `device_realtime_ms` and `browser_realtime_ms`. Exercise both directions of clock error, different browser time zones, explicit confirmation, and refusal during a manual or trigger claim. Test clock corrections with the simulator and check that the host clock is unaffected. [Operator procedure](../../docs/package.md#set-the-pi-clock-offline)
+- Keep NetworkManager writes in the dedicated helper. Verify managed Ethernet with DHCP and static IPv4, independent station/AP operation, and a bridge whose controller alone owns the IPv4 configuration. Exercise an explicit confirmation after reconnect, automatic rollback, a failed activation and preservation of administrator profiles. Keep Wi-Fi credentials out of logs, status, browser persistence and command arguments. [Network setup](../../docs/network.md)
+- Test the AP setup flow from a software-disabled radio through enable, SSID selection, client DHCP and confirmation at the displayed Wi-Fi URL. Check a conflicting default subnet, a hardware block, an unsupported adapter and a board without Wi-Fi. Verify that the standalone AP trial preserves the wired management connection. [AP setup](../../docs/network.md#create-a-wi-fi-access-point)
+- Verify wired recovery on a direct cable with the workstation on the recovery subnet, first without a DHCP lease and then with a different primary address. Exercise native address ownership, duplicate-address detection, cable replug, a bridged wired port and recovery disabled. Confirm a network trial through its intended primary address. [Direct-cable recovery](../../docs/network.md#connect-by-ethernet-when-the-main-address-is-unknown)
+- Verify both success and rollback whenever replacing settings that own live resources. Preserve user files, existing credentials and recordings across package upgrades.
+- Build the Debian archive after adding a module or static asset. Inspect its contents, modes, maintainer scripts, dependencies, systemd units, and executable entry points. Exercise the installed payload from a staging location to catch imports that only work in the checkout.
+- For installer changes, exercise Debian version ordering across multiple local archives, a missing checkout release, a repeated install and an upgrade with the service stopped. Simulate a failed install and check its exit status and diagnostic report. Exercise the standalone diagnostic path with missing packages, restricted journal access and a running controller. Keep the workstation commands and report descriptions in the [package guide](../../docs/package.md) current.
+
+Run the host checks from the repository root. At first connection, collect the inventory via SSH with `tools/inspect-board.sh` and check the Debian architecture alongside the board model. Keep the inventory usable before package installation. Follow [hardware validation](../../docs/hardware-validation.md) for device-specific behavior.
+
+## Recording storage
+
+Read [recording media](../../docs/storage.md) when changing device discovery or target selection. Keep inventory read-only and cached. Each recording start and recovery attempt revalidates the filesystem identity, required mounts, and open destination before creating a session. Use the pinned directory descriptor for every session file, including the final manifest. Exercise a detached drive, a replacement volume at the same path, a mounted SPI volume and raw MTD in fixtures.
+
+Keep USB and PCIe NVMe provisioning in the host-namespace helper. Bind a preparation request to the displayed disk identity and topology, reject stale selections and active/system media, and exercise destructive commands only on explicitly disposable media. Check mounting an existing ext4 separately from whole-disk erasure. In the simulator, choose a ready volume in one click, compare the displayed active directory to the saved configuration and record a clip there. Verify that a typed custom directory takes effect on save and that browsing the SSD leaves the destination intact. Check full and partial downloads in both access modes. Verify that old download URLs fail when their original volume changes.
+
+Exercise single-session deletion and directory cleanup on verified managed media. Reject the system disk and all its partitions, a missing or replaced drive, stale review data and active recording claims. Confirm that unrelated files and incomplete sessions are preserved.
+
+For a session ZIP, retrieve the archive URL returned by the recording list and compare its three members byte-for-byte with the individual downloads. Check both video formats and prevent incomplete sessions or stale volume links from being exported. Exercise the downloaded archive with the workstation renderer.
+
+## Change boot settings
+
+Verify that the Pi OS boot volume is mounted separately before presenting or editing its configuration. Keep administrator-provisioned sensor definitions in the root-owned catalog and exercise both stock and vendor overlays. When changing built-in entries, stage the OV9281 and four-lane 750 MHz IMX577 in turn on CAM0. Compare each connector preview to the staged directives, including lane, link-frequency, oscillator and focus variants. Verify the installed/missing groups with a partially populated overlays directory, and check that matching vendor definitions and colliding IDs retain their original API identities. Start with both recognized CAM0 overlays defined globally, verify that the operator must choose a profile, stage one and restore the original two-overlay file from backup. Check that multi-port definitions and mixed managed/unmanaged overlays still report conflicts. [Firmware guide](../../docs/firmware.md#ov9281-and-four-lane-imx577-on-cam0)
+
+The HTTP service obtains the boot configuration and its revision from the firmware helper. Keep the requested profile distinct from the sensor currently detected. Tests use a temporary simulated boot tree. Exercise manual overlay adoption, preservation of unrelated directives, stale submissions, backup restoration and explicit reboot confirmation. A recording claim blocks a reboot. After a hardware reboot, check the active sensor model and camera modes again. See [firmware profiles](../../docs/firmware.md).

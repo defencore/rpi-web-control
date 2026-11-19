@@ -1,0 +1,21 @@
+[Unit]
+Description=RPi Web Control network configuration
+
+[Service]
+ExecStart=/usr/bin/python3 -I /usr/lib/rpi-web-control/network-helper.py
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+Group=rpi-web-control
+RuntimeDirectory=rpi-web-control-network
+RuntimeDirectoryMode=0710
+RuntimeDirectoryPreserve=yes
+UMask=0077
+RuntimeMaxSec=115
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateDevices=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_UNIX

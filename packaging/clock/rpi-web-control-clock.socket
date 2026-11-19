@@ -1,0 +1,11 @@
+[Unit]
+Description=RPi Web Control device clock socket
+
+[Socket]
+ListenStream=/run/rpi-web-control-clock.sock
+SocketUser=root
+SocketGroup=rpi-web-control
+SocketMode=0660
+Accept=yes
+MaxConnections=4
+RemoveOnStop=yes

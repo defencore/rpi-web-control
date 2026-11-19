@@ -1,0 +1,66 @@
+#!/bin/sh
+set -eu
+
+if [ "$1" = configure ]; then
+    account=rpi-web-control
+    if ! getent group "$account" >/dev/null; then
+        addgroup --system "$account"
+    fi
+    if ! getent passwd "$account" >/dev/null; then
+        adduser --system --ingroup "$account" --home /var/lib/rpi-web-control \
+            --no-create-home --shell /usr/sbin/nologin "$account"
+    fi
+    for group in video render gpio dialout; do
+        if getent group "$group" >/dev/null; then
+            adduser --quiet "$account" "$group"
+        fi
+    done
+    config=/etc/rpi-web-control
+    install -d -o root -g "$account" -m 0750 "$config"
+    umask 077
+    work=$(mktemp -d "$config/.provision.XXXXXXXX")
+    trap 'rm -rf "$work"' EXIT
+    if [ ! -e "$config/token" ]; then
+        openssl rand -hex 32 > "$work/token"
+        install -g "$account" -m 0640 "$work/token" "$work/token.ready"
+        mv "$work/token.ready" "$config/token"
+    fi
+    if [ ! -e "$config/tls.key" ] && [ ! -e "$config/tls.crt" ]; then
+        openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$work/key"
+        install -g "$account" -m 0640 "$work/key" "$work/key.ready"
+        mv "$work/key.ready" "$config/tls.key"
+    fi
+    if [ ! -e "$config/tls.crt" ]; then
+        # Limit names to a DNS label before using them in the certificate.
+        host=$(hostname -s | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-' | cut -c 1-63)
+        host=${host:-raspberrypi}
+        openssl req -new -x509 -sha256 -days 825 -key "$config/tls.key" \
+            -subj "/CN=$host.local" -addext "subjectAltName=DNS:$host,DNS:$host.local,DNS:localhost,IP:127.0.0.1" \
+            -addext 'extendedKeyUsage=serverAuth' -out "$work/cert"
+        install -m 0644 "$work/cert" "$work/cert.ready"
+        mv "$work/cert.ready" "$config/tls.crt"
+    fi
+    rm -rf "$work"
+    trap - EXIT
+    # Keep a previously disabled service disabled across package upgrades.
+    for unit in rpi-web-control.service rpi-web-control-recovery.timer; do
+        deb-systemd-helper unmask "$unit" >/dev/null
+        if deb-systemd-helper --quiet was-enabled "$unit"; then
+            deb-systemd-helper enable "$unit" >/dev/null
+        else
+            deb-systemd-helper update-state "$unit" >/dev/null
+        fi
+    done
+    if [ -d /run/systemd/system ]; then
+        systemctl --system daemon-reload
+        if systemctl --quiet is-enabled rpi-web-control-recovery.timer; then
+            deb-systemd-invoke start rpi-web-control-recovery.timer >/dev/null
+        fi
+        if [ -z "${2:-}" ]; then
+            deb-systemd-invoke start rpi-web-control.service >/dev/null
+        elif systemctl --quiet is-active rpi-web-control.service; then
+            deb-systemd-invoke restart rpi-web-control.service >/dev/null
+        fi
+    fi
+fi
+exit 0

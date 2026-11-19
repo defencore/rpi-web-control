@@ -1,0 +1,11 @@
+Package: rpi-web-control
+Version: 0.7.0-1
+Section: video
+Priority: optional
+Architecture: arm64
+Maintainer: rpi-web-control maintainers <maintainers@rpi-web-control.invalid>
+Depends: python3 (>= 3.11), python3-picamera2 (>= 0.3.26), python3-numpy, python3-pil, python3-libgpiod, python3-serial, adduser, openssl, init-system-helpers (>= 1.54), systemd, fdisk, e2fsprogs, util-linux, mount, udev, iproute2
+Recommends: network-manager, python3-dbus, dnsmasq-base
+Description: Network camera and recording control for Raspberry Pi 5 and CM5
+ Web interface for live preview, RTP streaming, indexed recording,
+ recording downloads, PCIe NVMe and USB storage, hardware triggers and board settings.

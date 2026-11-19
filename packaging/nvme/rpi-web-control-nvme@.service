@@ -1,0 +1,19 @@
+[Unit]
+Description=RPi Web Control PCIe NVMe and USB recording disk helper
+
+[Service]
+ExecStart=/usr/bin/python3 -I /usr/lib/rpi-web-control/nvme-helper.py
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
+UMask=0077
+RuntimeMaxSec=9min
+NoNewPrivileges=yes
+# The mount must remain visible on the host after this instance exits.
+# Keep this helper in the host mount namespace with access to device nodes.
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_SYS_PTRACE CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes

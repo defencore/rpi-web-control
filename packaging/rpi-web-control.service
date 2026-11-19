@@ -1,0 +1,34 @@
+[Unit]
+Description=Raspberry Pi camera control service
+Wants=rpi-web-control-network.socket rpi-web-control-firmware.socket rpi-web-control-nvme.socket rpi-web-control-clock.socket
+After=rpi-web-control-network.socket rpi-web-control-firmware.socket rpi-web-control-nvme.socket rpi-web-control-clock.socket network.target
+
+[Service]
+Type=simple
+User=rpi-web-control
+Group=rpi-web-control
+StateDirectory=rpi-web-control
+StateDirectoryMode=0750
+WorkingDirectory=/var/lib/rpi-web-control
+Environment=PYTHONPATH=/usr/lib/rpi-web-control
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/default/rpi-web-control
+ExecStartPre=/usr/bin/mkdir -p /var/lib/rpi-web-control/recordings
+ExecStart=/usr/bin/python3 -sP -m rpi_web_control
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=45
+UMask=0027
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+
+[Install]
+WantedBy=multi-user.target

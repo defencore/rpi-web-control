@@ -1,0 +1,11 @@
+[Unit]
+Description=RPi Web Control network configuration socket
+
+[Socket]
+ListenStream=/run/rpi-web-control-network.sock
+SocketUser=root
+SocketGroup=rpi-web-control
+SocketMode=0660
+Accept=yes
+MaxConnections=8
+RemoveOnStop=yes
