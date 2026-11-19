@@ -1,6 +1,6 @@
 # Receive live video on a remote computer
 
-The **Network stream** page sends color RTP/JPEG over UDP. By default the sender attempts to transmit every captured frame. You can limit the stream rate while capturing and recording at the selected camera rate. The browser's **Capture monitor** page offers a separate MJPEG preview.
+The **Network stream** page sends color RTP/JPEG over UDP. By default the sender attempts to transmit every captured frame. You can limit the stream rate while capturing and recording at the selected camera rate. The browser's **Capture monitor** page offers a separate MJPEG preview. [See the receiver controls](interface-guide.md#stream-to-a-computer)
 
 ## Install GStreamer on the receiving computer
 

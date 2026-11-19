@@ -21,14 +21,14 @@ Check the reported model and arm64 package architecture, OS release, boot volume
 From the workstation, copy the verified archive to the operator's home directory and open an SSH shell on the target.
 
 ```sh
-scp dist/rpi-web-control_0.11.0-1_arm64.deb operator@capture-pi.local:
+scp dist/rpi-web-control_0.11.0-2_arm64.deb operator@capture-pi.local:
 ssh operator@capture-pi.local
 ```
 
 On the Pi, run the following commands from the operator's home directory. When upgrading an existing installation, stop active recordings first.
 
 ```sh
-sudo apt install ./rpi-web-control_0.11.0-1_arm64.deb
+sudo apt install ./rpi-web-control_0.11.0-2_arm64.deb
 systemctl is-active rpi-web-control.service
 sudo openssl x509 -in /etc/rpi-web-control/tls.crt -noout -fingerprint -sha256
 ```

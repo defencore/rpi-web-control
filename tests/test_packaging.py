@@ -3,6 +3,7 @@
 import configparser
 import io
 import json
+import re
 import runpy
 import shlex
 import shutil
@@ -174,3 +175,10 @@ class PackageTests(unittest.TestCase):
                 self.assertTrue(data.getmember(f"{docs}/docs/post-processing.md").isfile())
                 self.assertTrue(data.getmember(f"{docs}/docs/assets/gpio-header-40pin.svg").isfile())
                 self.assertTrue(data.getmember(f"{docs}/docs/hardware-results/pi5-ov9281-preview.md").isfile())
+                for page in ("README.md", "docs/interface-guide.md"):
+                    markdown = data.extractfile(f"{docs}/{page}").read().decode()
+                    images = re.findall(r"!\[[^\]]*\]\(([^)]+\.png)\)", markdown)
+                    self.assertTrue(images, f"No screenshots in {page}")
+                    for image in images:
+                        path = Path(page).parent / image
+                        self.assertEqual(data.extractfile(f"{docs}/{path}").read(), (ROOT / path).read_bytes())

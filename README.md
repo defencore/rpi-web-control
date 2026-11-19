@@ -1,10 +1,14 @@
 # Raspberry Pi Web Control
 
-An English-language camera console for Raspberry Pi 5 and Compute Module 5 running Raspberry Pi OS 64-bit. The systemd service serves the dashboard and API over HTTPS. It opens the CSI camera on demand. An operator and multiple trigger rules can share one recording. A separate RTP/JPEG output streams to a PC over Ethernet or Wi-Fi, and the desktop renderer can add time-aligned telemetry to a saved clip.
+Control a CSI camera on a Raspberry Pi 5 or Compute Module 5 from a phone or laptop. Preview the camera, record to NVMe or USB, and download video with per-frame timestamps. Start a clip from the browser or a GPIO button, or stream live video to a computer over Ethernet or Wi-Fi.
+
+[![The simulator’s capture monitor recording a color-bar preview to NVMe, a GPIO17 button configured to start and stop a clip, and a finished recording with its Download ZIP button.](docs/assets/screenshots/interface-overview.png)](docs/interface-guide.md)
+
+[Explore the seven console pages](docs/interface-guide.md) · [Install on a Pi](#install-or-upgrade-over-ssh) · [Try the simulator](#getting-started-without-a-board)
 
 ## Install or upgrade over SSH
 
-Stop any active recording before upgrading. From the checkout on your workstation, run the installer with your Pi's SSH login and address.
+The console and its HTTPS API run as a systemd service on 64-bit Raspberry Pi OS. The service opens the CSI camera on demand. Stop any active recording before upgrading. From the checkout on your workstation, run the installer with your Pi's SSH login and address.
 
 ```sh
 ./install.sh ubuntu@192.168.55.100

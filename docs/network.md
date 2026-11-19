@@ -1,6 +1,6 @@
 # Ethernet and Wi-Fi
 
-On **Network settings**, expand **Join an existing Wi-Fi network** to connect the Pi to a router, **Host a Wi-Fi hotspot** to let a phone or laptop join the Pi directly, or **Edit adapter and IP settings** to set a fixed Ethernet address or create a bridge. **Console addresses** lists the primary address of each connected adapter or bridge. Use the link for the network your computer is on. A wired-only CM5 can configure Ethernet. Joining a Wi-Fi network requires a managed radio. To host an access point, enable the radio, configure its regulatory country in Raspberry Pi OS and choose an adapter with AP support.
+On **Network settings**, expand **Join an existing Wi-Fi network** to connect the Pi to a router, **Host a Wi-Fi hotspot** to let a phone or laptop join the Pi directly, or **Edit adapter and IP settings** to set a fixed Ethernet address or create a bridge. **Console addresses** lists the primary address of each connected adapter or bridge. Use the link for the network your computer is on. A wired-only CM5 can configure Ethernet. Joining a Wi-Fi network requires a managed radio. To host an access point, enable the radio, configure its regulatory country in Raspberry Pi OS and choose an adapter with AP support. [See the Ethernet and hotspot addresses](interface-guide.md#connect-over-ethernet-or-wi-fi)
 
 | Connection | When to use it | Where the Pi's IPv4 address belongs |
 | --- | --- | --- |

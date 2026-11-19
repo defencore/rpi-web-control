@@ -47,6 +47,8 @@ def package_files():
             ROOT / "tools/check-camera-modes.py", *(ROOT / "docs").glob("*.md"),
             *(ROOT / "docs/hardware-results").glob("*.md"),
             ROOT / "docs/assets/gpio-header-40pin.svg"]
+    docs.extend(image for image in (ROOT / "docs/assets/screenshots").glob("*.png")
+                if image.is_file() and not image.is_symlink() and not image.name.startswith("."))
     docs.extend(file for file in (ROOT / "skills").rglob("*") if file.suffix in {".md", ".py"})
     for doc in docs:
         data[f"usr/share/doc/{NAME}/{doc.relative_to(ROOT)}"] = (doc, 0o644)

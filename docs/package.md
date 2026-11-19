@@ -4,7 +4,7 @@ The package targets Raspberry Pi OS 64-bit Bookworm or newer on Raspberry Pi 5 a
 
 ## Build and inspect
 
-From the project root, run `make deb` and `make verify-deb`. The builder needs Python 3.11 or newer, Make, a POSIX shell and the standard `ar` tool. It writes `dist/rpi-web-control_0.11.0-1_arm64.deb`. The same sources, toolchain and `SOURCE_DATE_EPOCH` produce the same bytes. The default archive timestamp is zero. The builder verifies the control scripts, member order, payload hashes, file modes and ownership. Where installed, it also runs `dpkg-deb --info` and `dpkg-deb --contents`.
+From the project root, run `make deb` and `make verify-deb`. The builder needs Python 3.11 or newer, Make, a POSIX shell and the standard `ar` tool. It writes `dist/rpi-web-control_0.11.0-2_arm64.deb`. The same sources, toolchain and `SOURCE_DATE_EPOCH` produce the same bytes. The default archive timestamp is zero. The builder verifies the control scripts, member order, payload hashes, file modes and ownership. Where installed, it also runs `dpkg-deb --info` and `dpkg-deb --contents`.
 
 Download the desktop export utility from **Recordings → Convert to MP4**. It is also included in `/usr/share/doc/rpi-web-control/tools/render_recording.py` and in the project checkout. On the workstation it accepts a downloaded session ZIP or a completed recording directory. See the [desktop export guide](post-processing.md) for requirements and commands.
 
@@ -20,7 +20,7 @@ The script builds the release named in `packaging/control` if its arm64 archive 
 
 The script reuses one SSH connection and honors normal host key verification and SSH authentication. APT runs as root and keeps locally edited package configuration files. For a non-root login, run the installer from a terminal so sudo can prompt on the Pi. An unattended run needs working SSH authentication and noninteractive sudo access to the install command.
 
-The installer verifies the installed version and service state. A fresh install starts the service, and an upgrade restarts a running service. A previously installed, intentionally stopped service stays stopped. If the selected version is already installed, the installer checks its state and skips the APT step. If the installed version is newer, it reports the version mismatch and exits before APT runs. For manual installation, copy the archive to the Pi and run `sudo apt install ./rpi-web-control_0.11.0-1_arm64.deb` there.
+The installer verifies the installed version and service state. A fresh install starts the service, and an upgrade restarts a running service. A previously installed, intentionally stopped service stays stopped. If the selected version is already installed, the installer checks its state and skips the APT step. If the installed version is newer, it reports the version mismatch and exits before APT runs. For manual installation, copy the archive to the Pi and run `sudo apt install ./rpi-web-control_0.11.0-2_arm64.deb` there.
 
 ### Collect diagnostics
 

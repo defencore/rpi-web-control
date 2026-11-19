@@ -27,7 +27,7 @@ For a pushbutton whose contacts close only while pressed, use a normally open (*
 
 1. In **Recording triggers**, edit the existing GPIO17 rule or choose **Add rule** if GPIO17 is free. Enter a **Rule name** such as `button` and choose **GPIO button or contact**.
 2. Set **Start BCM GPIO pin** to `17`, the contact to **Normally open** and **Contact timing → Start debounce time (ms)** to `30`.
-3. Choose the recording behavior in the table. Enable and save the rule. Wait for **Ready**, then test it with manual recording off.
+3. Choose the recording behavior in the table. Enable and save the rule. Wait for **Ready**, then test it with manual recording off. [See the GPIO17 rule in the console](interface-guide.md#record-with-a-button)
 
 | Desired operation | Recording behavior | Test |
 | --- | --- | --- |
