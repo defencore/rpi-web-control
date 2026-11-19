@@ -10,6 +10,11 @@ const defaults = {
   sensor: {path: "/sys/class/thermal/thermal_zone0/temp", comparison: "above", threshold: 60000, hysteresis: 2000, poll_ms: 250},
   uart: {device: "/dev/serial0", baud: 115200, start_command: "START", stop_command: "STOP"},
 };
+const gpioStopDefaults = {
+  gpio: {pin: 27, contact: "NC", debounce_ms: 30},
+  uart: {device: "/dev/ttyUSB0", baud: 115200, command: "STOP"},
+};
+const contactChoices = [["NO", "Normally open"], ["NC", "Normally closed"]];
 const integerFormat = new Intl.NumberFormat("en-US");
 const fpsFormat = new Intl.NumberFormat("en-US", {maximumFractionDigits: 2});
 const clockFormat = new Intl.DateTimeFormat("en-GB", {
@@ -482,6 +487,46 @@ function triggerField(name, title, value, options = {}) {
   return label;
 }
 
+function gpioStopFields(rule) {
+  const saved = rule.stop;
+  const selector = triggerField("stop_type", "Stop recording when", saved?.type || "level", {choices: [
+    ["level", "Start contact returns to normal"], ["gpio", "Second GPIO contact activates"], ["uart", "UART command arrives"],
+  ]});
+  const type = selector.querySelector("select");
+  function field(kind, name, label, options) {
+    const data = saved?.type === kind ? saved : gpioStopDefaults[kind];
+    return triggerField("stop_" + name, label, data[name], options);
+  }
+  const gpio = [
+    field("gpio", "pin", "Stop BCM GPIO pin", {min: 0, max: 27}),
+    field("gpio", "contact", "Stop contact type", {choices: contactChoices}),
+    field("gpio", "debounce_ms", "Stop debounce time (ms)", {min: 0, max: 1000}),
+  ];
+  const uart = [
+    field("uart", "device", "Stop UART device", {text: true}),
+    field("uart", "baud", "Stop baud rate", {min: 1}),
+    field("uart", "command", "Stop command", {text: true}),
+  ];
+  const onReturn = element("input");
+  onReturn.type = "checkbox";
+  onReturn.name = "stop_on_return";
+  onReturn.checked = rule.stop_on_return === true;
+  const returnLabel = element("label", undefined, "check-line");
+  returnLabel.append(onReturn, "Also stop when the start contact returns to normal");
+  function showSelection() {
+    returnLabel.hidden = onReturn.disabled = type.value === "level";
+    for (const [kind, fields] of [["gpio", gpio], ["uart", uart]]) {
+      for (const label of fields) {
+        label.hidden = type.value !== kind;
+        label.querySelector("input, select").disabled = label.hidden;
+      }
+    }
+  }
+  type.addEventListener("change", showSelection);
+  showSelection();
+  return [selector, ...gpio, ...uart, returnLabel];
+}
+
 function ruleFields(type, data) {
   const field = (name, label, opts) => triggerField(name, label, data[name], opts);
   let fields;
@@ -490,7 +535,8 @@ function ruleFields(type, data) {
       fields = [field("interval_s", "Repeat interval (s)", {min: 0.1, step: "any"}), field("duration_s", "Recording duration (s)", {min: 0.1, step: "any"})];
       break;
     case "gpio":
-      fields = [field("pin", "BCM GPIO pin", {min: 0, max: 27}), field("contact", "Contact type", {choices: [["NO", "Normally open"], ["NC", "Normally closed"]]}), field("debounce_ms", "Debounce time (ms)", {min: 0, max: 1000})];
+      fields = [field("pin", "BCM GPIO pin", {min: 0, max: 27}), field("contact", "Contact type", {choices: contactChoices}),
+        field("debounce_ms", "Debounce time (ms)", {min: 0, max: 1000}), ...gpioStopFields(data)];
       break;
     case "sensor":
       fields = [field("path", "Sensor sysfs path", {text: true}), field("comparison", "Record when", {choices: [["above", "Above threshold"], ["below", "Below threshold"]]}), field("threshold", "Threshold (sensor units)", {step: "any"}), field("hysteresis", "Hysteresis (sensor units)", {min: 0, step: "any"}), field("poll_ms", "Poll interval (ms)", {min: 20, max: 60000})];
@@ -618,9 +664,16 @@ byId("trigger-form").addEventListener("submit", event => {
   const fields = event.currentTarget.elements;
   const type = fields.type.value;
   const rule = {id: fields.id.value, type, enabled: fields.enabled.checked};
-  for (const name of Object.keys(defaults[type])) {
+  function fieldValue(name) {
     const input = fields.namedItem(name);
-    rule[name] = input.type === "number" ? input.valueAsNumber : input.value;
+    return input.type === "number" ? input.valueAsNumber : input.value;
+  }
+  for (const name of Object.keys(defaults[type])) rule[name] = fieldValue(name);
+  if (type === "gpio" && fields.stop_type.value !== "level") {
+    const stopType = fields.stop_type.value;
+    rule.stop = {type: stopType};
+    for (const name of Object.keys(gpioStopDefaults[stopType])) rule.stop[name] = fieldValue("stop_" + name);
+    if (fields.stop_on_return.checked) rule.stop_on_return = true;
   }
   const existing = snapshot.config.triggers;
   if (existing.some(item => item.id === rule.id && item.id !== editingRule?.id)) {

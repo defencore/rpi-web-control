@@ -33,6 +33,7 @@ STATIC_FILES = {
     "/static/ui.js": ("ui.js", "text/javascript; charset=utf-8"),
     "/static/device.js": ("device.js", "text/javascript; charset=utf-8"),
     "/static/network.js": ("network.js", "text/javascript; charset=utf-8"),
+    "/static/wifi_station.js": ("wifi_station.js", "text/javascript; charset=utf-8"),
     "/static/storage.js": ("storage.js", "text/javascript; charset=utf-8"),
 }
 SESSION_SECONDS = 12 * 60 * 60
@@ -346,7 +347,7 @@ class Handler(BaseHTTPRequestHandler):
         app = self.server.application
         url = urlsplit(self.path)
         path = url.path
-        if method == "GET" and path in STATIC_FILES:
+        if method in ("GET", "HEAD") and path in STATIC_FILES:
             name, mime = STATIC_FILES[path]
             return self.reply(200, (STATIC / name).read_bytes(), mime)
         if method == "POST":

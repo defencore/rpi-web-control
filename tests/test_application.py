@@ -38,6 +38,10 @@ class ApplicationTests(unittest.TestCase):
         self.app.record("manual", True)
         self.app.trigger("contact", True)
         session = self.app.camera.status()["session"]
+        self.app.trigger("contact", False)
+        self.assertEqual(self.app.status()["recording_sources"], ["manual"])
+        self.assertEqual(self.app.camera.status()["session"], session)
+        self.app.trigger("contact", True)
         self.app.record("manual", False)
         self.assertEqual(self.app.status()["recording_sources"], ["trigger:contact"])
         with self.assertRaises(Conflict):
@@ -220,6 +224,33 @@ class ApplicationTests(unittest.TestCase):
         self.app.reboot_until = time.monotonic() + 60
         with self.assertRaises(Conflict):
             self.app.set_clock(body)
+
+    def test_recovering_recording_keeps_camera_and_destination(self):
+        self.app.trigger("held", True)
+        previous = self.app.config
+        directory = self.root / "another"
+        directory.mkdir()
+        with self.app.config_lock, self.app.record_lock:
+            self.app.camera.stop_recording()
+            for change in ({"camera": {"fps": 24}}, {"storage": {"directory": str(directory)}}):
+                with self.subTest(change=change), self.assertRaises(Conflict):
+                    self.app.configure(change)
+            self.assertEqual(self.app.config, previous)
+        self.app.trigger("held", False)
+        self.app.configure({"camera": {"fps": 24}, "storage": {"directory": str(directory)}})
+        self.assertEqual(self.app.config["storage"]["directory"], str(directory))
+
+    def test_new_trigger_rules_reject_aliases_of_the_same_serial_port(self):
+        rules = [{"id": "serial", "type": "uart", "device": "/dev/ttyAMA0"},
+                 {"id": "gate", "type": "gpio", "pin": 17,
+                  "stop": {"type": "uart", "device": "/dev/serial0"}}]
+        with patch("rpi_web_control.triggers.realpath", return_value="/dev/ttyAMA0"):
+            with self.assertRaisesRegex(ValueError, "cannot share a uart input"):
+                self.app.configure({"triggers": rules})
+            self.assertEqual(self.app.config["triggers"], [])
+            self.app.store.save({**self.app.config, "triggers": rules}, storage_identity=None)
+            restored = self.app.store.load()
+            self.assertEqual(restored["triggers"][1]["stop"]["device"], "/dev/serial0")
 
     def test_simulated_clock_correction_timestamps_the_next_recording(self):
         target_ms = 2_000_000_000_000

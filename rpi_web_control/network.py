@@ -5,9 +5,10 @@ import re
 import socket
 import sys
 
-from .network_profiles import NM, inventory, validate_apply
+from .network_profiles import NM, inventory, validate_apply, validate_interface
 from .network_transaction import JOURNAL_NAME, STATE_DIR, NetworkConflict, NetworkTransaction
 from .recovery_config import read_status
+from .wifi_scan import scan_results
 
 ROOT = "/org/freedesktop/NetworkManager"
 SOCKET = "/run/rpi-web-control-network.sock"
@@ -20,6 +21,13 @@ def normalize_request(settings):
     if not isinstance(settings, dict):
         raise ValueError("Expected a network configuration object.")
     if settings == {"action": "enable_wifi"}:
+        return settings, False
+    if settings.get("action") == "scan_wifi":
+        if settings.keys() - {"action", "interface", "allow_ap_scan"}:
+            raise ValueError("Unexpected Wi-Fi scan options.")
+        validate_interface(settings.get("interface"))
+        if type(settings.get("allow_ap_scan", False)) is not bool:
+            raise ValueError("Set allow_ap_scan to true or false.")
         return settings, False
     legacy = settings.keys() == LEGACY_FIELDS
     if legacy:
@@ -45,7 +53,10 @@ def _helper(request):
             sock.connect(SOCKET)
             sock.sendall(json.dumps(request).encode() + b"\n")
             with sock.makefile("rb") as stream:
-                reply = json.loads(stream.readline(MAX_REQUEST))
+                line = stream.readline(MAX_REQUEST + 1)
+                if len(line) > MAX_REQUEST or not line.endswith(b"\n"):
+                    raise ValueError("Invalid network helper reply size.")
+                reply = json.loads(line)
     except (OSError, ValueError) as exc:
         raise RuntimeError("The network helper is unavailable or timed out. Check the current connection.") from exc
     if not isinstance(reply, dict):
@@ -53,6 +64,11 @@ def _helper(request):
     if reply.get("ok") is not True:
         error_type = {"invalid": ValueError, "conflict": NetworkConflict}.get(reply.get("kind"), RuntimeError)
         raise error_type(reply.get("error", "Network operation failed."))
+    if request.get("action") == "scan_wifi":
+        ticket = reply.get("scan")
+        if not isinstance(ticket, dict):
+            raise RuntimeError("The network helper did not return a scan request.")
+        return ticket
     return reply.get("pending")
 
 
@@ -85,7 +101,10 @@ class Network:
 
     def apply(self, settings):
         normalize_request(settings)
-        _helper(settings)
+        response = _helper(settings)
+        if settings.get("action") == "scan_wifi":
+            with _Manager() as manager:
+                return scan_results(manager, settings["interface"], response, retry=lambda: _helper(settings))
         return self.status()
 
 
@@ -135,23 +154,25 @@ def helper_main():
             request, legacy = normalize_request(request)
         with _Manager() as manager:
             change = NetworkTransaction(manager)
-            if status_only:
-                pending = change.status()
-            elif request["action"] == "enable_wifi":
+            action = request["action"]
+            field, value = "pending", None
+            if action == "scan_wifi":
+                field, value = "scan", change.request_scan(request["interface"],
+                                                           allow_ap_scan=request.get("allow_ap_scan", False))
+            elif status_only:
+                value = change.status()
+            elif action == "enable_wifi":
                 change.enable_wifi()
-                pending = None
-            elif request["action"] == "apply":
-                pending = change.stage(request)
+            elif action == "apply":
+                value = change.stage(request)
                 if legacy:
-                    change.confirm(pending["id"])
-                    pending = None
-            elif request["action"] == "confirm":
+                    change.confirm(value["id"])
+                    value = None
+            elif action == "confirm":
                 change.confirm(request["id"])
-                pending = None
             else:
                 change.cancel(request["id"])
-                pending = None
-        result = {"ok": True, "pending": pending}
+        result = {"ok": True, field: value}
     except (ValueError, NetworkConflict, RuntimeError) as exc:
         kind = "invalid" if isinstance(exc, ValueError) else "conflict" if isinstance(exc, NetworkConflict) else "failed"
         result = {"ok": False, "kind": kind, "error": str(exc)}

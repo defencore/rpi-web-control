@@ -18,7 +18,7 @@ STATES = {10: "unmanaged", 20: "unavailable", 30: "disconnected", 100: "connecte
           110: "disconnecting", 120: "failed"}
 
 
-def _interface(name):
+def validate_interface(name):
     if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,14}", name):
         raise ValueError("Select a valid network interface.")
 
@@ -27,7 +27,17 @@ def _credentials(settings):
     ssid, password = settings["ssid"], settings["password"]
     if not isinstance(ssid, str) or not ssid.isprintable() or not 1 <= len(ssid.encode("utf-8")) <= 32:
         raise ValueError("SSID must be 1 to 32 UTF-8 bytes of printable text.")
-    if not isinstance(password, str) or not re.fullmatch(r"[ -~]{8,63}|[a-fA-F0-9]{64}", password):
+    security = settings.get("security", "wpa2-personal")
+    if security == "open":
+        if password != "":
+            raise ValueError("Leave the password empty for an open Wi-Fi network.")
+    elif security == "wpa3-personal":
+        # SAE accepts a passphrase of any length. D-Bus strings must be valid UTF-8 without NUL.
+        if not isinstance(password, str) or not re.fullmatch(r"[^\x00\ud800-\udfff]+", password):
+            raise ValueError("Enter the WPA3-Personal passphrase.")
+    elif security != "wpa2-personal":
+        raise ValueError("Select open, WPA2-Personal or WPA3-Personal security.")
+    elif not isinstance(password, str) or not re.fullmatch(r"[ -~]{8,63}|[a-fA-F0-9]{64}", password):
         raise ValueError("Enter an 8 to 63 character WPA passphrase or a 64-digit hexadecimal key.")
 
 
@@ -87,20 +97,24 @@ def validate_apply(settings):
     mode = settings.get("mode")
     if mode not in ("ethernet", "station", "ap", "bridge"):
         raise ValueError("Select a supported network mode.")
-    _interface(settings.get("interface"))
+    validate_interface(settings.get("interface"))
     wifi = mode in ("station", "ap", "bridge")
     fields = {"interface", "mode"}
     if wifi:
         fields.update(("ssid", "password"))
     if mode == "bridge":
         fields.add("wifi_interface")
-        _interface(settings.get("wifi_interface"))
+        validate_interface(settings.get("wifi_interface"))
         if settings["wifi_interface"] == settings["interface"]:
             raise ValueError("Select separate Ethernet and Wi-Fi interfaces.")
     if mode in ("station", "ap") and settings.keys() == fields:
         _credentials(settings)
         return
     fields.update(("action", "ipv4_method", "address", "gateway", "dns"))
+    if mode == "station":
+        fields.update(settings.keys() & {"security", "hidden"})
+        if type(settings.get("hidden", False)) is not bool:
+            raise ValueError("Set hidden to true or false for a station network.")
     if settings.keys() != fields or settings["action"] != "apply":
         raise ValueError("Unexpected or missing fields for the selected network mode.")
     if wifi:
@@ -126,8 +140,12 @@ def build_profiles(settings, dbus):
     def configure_wifi(p):
         p[WIFI].update(ssid=dbus.ByteArray(settings["ssid"].encode("utf-8")),
                        mode="infrastructure" if mode == "station" else "ap")
-        p[WIFI + "-security"] = {"key-mgmt": "wpa-psk", "psk": settings["password"],
-                                 "proto": dbus.Array(["rsn"], signature="s")}
+        if settings.get("hidden"):
+            p[WIFI]["hidden"] = True
+        security = settings.get("security", "wpa2-personal")
+        if security != "open":
+            p[WIFI + "-security"] = {"key-mgmt": "sae" if security == "wpa3-personal" else "wpa-psk",
+                                     "psk": settings["password"], "proto": dbus.Array(["rsn"], signature="s")}
 
     if mode == "bridge":
         main = profile(BRIDGE, "bridge")
@@ -192,6 +210,18 @@ def _configured_primary(ipv4):
     return ""
 
 
+def _station_security(settings):
+    security = settings.get(WIFI + "-security")
+    if security is None:
+        return "open"
+    key_mgmt = security.get("key-mgmt")
+    if key_mgmt == "sae":
+        return "wpa3-personal"
+    if key_mgmt == "wpa-psk" and (not security.get("proto") or "rsn" in security["proto"]):
+        return "wpa2-personal"
+    return "unsupported"
+
+
 def inventory(manager):
     """Read status without requesting secrets. Keep kernel port membership even on unmanaged controllers."""
     devices = {str(path): manager.iface(path, PROPERTIES).GetAll(NM + ".Device")
@@ -214,6 +244,7 @@ def inventory(manager):
         ip_path = str(dev.get("Ip4Config", "/"))
         ip = manager.iface(ip_path, PROPERTIES).GetAll(NM + ".IP4Config") if ip_path != "/" else {}
         active_uuid = method = configured_primary = ""
+        station = {}
         dns_override = []
         controller = members.get(path, "")
         active_path = str(dev.get("ActiveConnection", "/"))
@@ -236,6 +267,8 @@ def inventory(manager):
                 dns_override = _dns_override(ipv4)
                 if kind == "wifi" and state == 100 and not ssid:
                     ssid = bytes(settings.get(WIFI, {}).get("ssid", b"")).decode("utf-8", "replace")
+                if mode == "station":
+                    station = {"security": _station_security(settings), "hidden": bool(settings.get(WIFI, {}).get("hidden"))}
         rows.append({
             "name": name, "path": path, "type": kind, "physical": kind != "bridge" and not int(dev["Capabilities"]) & 4,
             "state": STATES.get(state, "connecting" if 40 <= state <= 90 else "unknown"),
@@ -244,7 +277,7 @@ def inventory(manager):
             "ports": [str(devices[str(p)]["Interface"]) if str(p) in devices else "unknown" for p in dev.get("Ports", [])],
             "addresses": [f"{a['address']}/{a['prefix']}" for a in ip.get("AddressData", [])],
             "gateway": str(ip.get("Gateway", "")), "dns": [str(n["address"]) for n in ip.get("NameserverData", [])],
-            "dns_override": dns_override, "configured_primary": configured_primary,
+            "dns_override": dns_override, "configured_primary": configured_primary, **station,
         })
     return rows
 
@@ -286,6 +319,9 @@ def validate_selection(settings, rows, existing_profiles):
     controllers = bridges | {BRIDGE}
     touches_bridge = (mode == "bridge" or any(by_name[n]["controller"] == BRIDGE for n in targets)
                       or any(n in targets and parent in controllers for n, parent, _ in saved))
+    if mode == "station" and touches_bridge:
+        raise ValueError("This Wi-Fi interface is a bridge port. Select an independent Wi-Fi adapter "
+                         "or reconfigure the bridge before joining a network.")
     for name, parent, service_owned in saved:
         if not service_owned and ((name in targets and parent)
                                   or (touches_bridge and (name == BRIDGE or parent in controllers))):

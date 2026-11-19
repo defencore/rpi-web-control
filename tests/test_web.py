@@ -126,9 +126,14 @@ class WebTests(unittest.TestCase):
         self.assertEqual(self.request("/api/status").status, 401)
         self.assertEqual(self.request("/api/login", {"token": "incorrect"}).status, 401)
         self.assertEqual(self.request("/api/login", {"token": self.token}, Origin="http://external").status, 403)
+        homepage = self.request("/", method="HEAD")
+        self.assertEqual(homepage.status, 200)
+        self.assertEqual(int(homepage.getheader("Content-Length")), len(self.request("/").read()))
+        self.assertEqual(homepage.read(), b"")
         self.login()
         self.assertTrue(json.load(self.request("/api/capabilities"))["available"])
-        for path in ("/", "/static/style.css", "/static/app.js", "/static/ui.js", "/static/device.js"):
+        for path in ("/", "/static/style.css", "/static/app.js", "/static/ui.js", "/static/device.js",
+                     "/static/network.js", "/static/wifi_station.js"):
             response = self.request(path)
             self.assertEqual(response.status, 200, path)
             self.assertTrue(response.read())

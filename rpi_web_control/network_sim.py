@@ -14,6 +14,16 @@ from .network import normalize_request
 from .network_profiles import BRIDGE
 from .network_transaction import CONFIRM_TIMEOUT, NetworkConflict
 from .recovery_config import get_config
+from .wifi_scan import AP_SCAN_UNAVAILABLE, SCAN_CACHE_SECONDS, scan_adapter
+
+
+SIMULATED_NETWORKS = (
+    {"ssid": "Capture Lab", "strength": 91, "security": "wpa2-personal", "supported": True},
+    {"ssid": "Capture Guest", "strength": 77, "security": "open", "supported": True},
+    {"ssid": "Capture Studio", "strength": 65, "security": "wpa3-personal", "supported": True},
+    {"ssid": "Capture Office", "strength": 52, "security": "enterprise", "supported": False},
+)
+SIMULATED_PASSPHRASE = "camera-fixture-key"
 
 
 def _interface(name, kind, number):
@@ -27,6 +37,8 @@ def _interface(name, kind, number):
 
 
 def _activate(row, mode, *, controller="", ssid=""):
+    row.pop("security", None)
+    row.pop("hidden", None)
     row.update(mode=mode, state="connected", controller=controller, ssid=ssid,
                active_uuid=str(uuid.uuid4()), addresses=[], gateway="", dns=[], dns_override=[],
                ipv4_method="", configured_primary="")
@@ -76,6 +88,7 @@ class SimulatedNetwork:
         self._dhcp = dhcp
         self._wifi_enabled = wifi_enabled
         self._wifi_hardware_enabled = wifi_hardware_enabled
+        self._last_scan = {}
         wired = _interface("eth0", "ethernet", 1)
         _activate(wired, "ethernet")
         _set_ipv4(wired, {"ipv4_method": "auto", "address": "", "gateway": "", "dns": []})
@@ -91,6 +104,9 @@ class SimulatedNetwork:
             # A saved bridge requires both ports to be present in this fixture.
             if wifi or BRIDGE not in saved:
                 for row in saved.values():
+                    if row["mode"] == "station":
+                        row.setdefault("security", "wpa2-personal")
+                        row.setdefault("hidden", False)
                     # Older fixtures saved only effective DNS. Each simulated DHCP
                     # lease supplies its gateway as the sole DNS server by default.
                     if "dns_override" not in row:
@@ -131,6 +147,8 @@ class SimulatedNetwork:
                 if row["type"] == "wifi":
                     row.update(state="unavailable", mode="disconnected", addresses=[], ssid="",
                                gateway="", dns=[], controller="", active_uuid="", ipv4_method="", configured_primary="")
+                    row.pop("security", None)
+                    row.pop("hidden", None)
         recovery = _recovery(effective)
         return {"available": True, "simulated": True, "message": "", "pending": pending,
                 "interfaces": list(effective.values()), "recovery": recovery,
@@ -139,6 +157,32 @@ class SimulatedNetwork:
     def status(self):
         with self._lock:
             return self._status(monotonic())
+
+    def _scan(self, name, now, *, allow_ap_scan):
+        status = self._status(now)
+        if status["pending"]:
+            raise NetworkConflict("Finish the pending network change before scanning for Wi-Fi.")
+        radio = scan_adapter(name, status["interfaces"], status["wifi_radio"], allow_ap_scan=allow_ap_scan)
+        if radio["mode"] == "ap" and not SIMULATED_NETWORKS:
+            raise RuntimeError(AP_SCAN_UNAVAILABLE)
+        previous = self._last_scan.get(name)
+        cached = bool(SIMULATED_NETWORKS) and previous is not None and now - previous < SCAN_CACHE_SECONDS
+        if not cached:
+            self._last_scan[name] = now
+        return {"interface": name, "networks": [dict(row) for row in SIMULATED_NETWORKS], "cached": cached,
+                "previous_results": False, "access_points_seen": len(SIMULATED_NETWORKS), "truncated": False}
+
+    def _check_station(self, settings):
+        if self._confirmed[settings["interface"]]["controller"]:
+            raise ValueError("This Wi-Fi interface is a bridge port. Choose a separate Wi-Fi interface "
+                             "or configure standalone Ethernet before joining.")
+        for network in SIMULATED_NETWORKS:
+            if network["ssid"] == settings["ssid"]:
+                if not network["supported"] or settings.get("security", "wpa2-personal") != network["security"]:
+                    raise RuntimeError("Wi-Fi security does not match the selected simulated network.")
+                if network["security"] != "open" and settings["password"] != SIMULATED_PASSPHRASE:
+                    raise RuntimeError("Wi-Fi authentication failed. Check the network password.")
+                break
 
     def _stage(self, settings):
         mode, name = settings["mode"], settings["interface"]
@@ -149,8 +193,12 @@ class SimulatedNetwork:
             raise ValueError("The selected Wi-Fi interface is unavailable.")
         if mode != "ethernet" and not (self._wifi_enabled and self._wifi_hardware_enabled):
             raise ValueError("Enable the Wi-Fi radio before applying wireless settings.")
+        if mode == "station":
+            self._check_station(settings)
         # Releasing a managed bridge restores default profiles on its unselected ports.
-        rows = deepcopy(self._defaults if BRIDGE in self._confirmed else self._confirmed)
+        replace_bridge = BRIDGE in self._confirmed and (
+            mode == "bridge" or self._confirmed[name]["controller"] == BRIDGE)
+        rows = deepcopy(self._defaults if replace_bridge else self._confirmed)
         if mode == "bridge":
             wireless = settings["wifi_interface"]
             _activate(rows[name], "ethernet", controller=BRIDGE)
@@ -159,6 +207,8 @@ class SimulatedNetwork:
             rows[name] = _interface(BRIDGE, "bridge", 3)
             rows[name]["ports"] = [settings["interface"], wireless]
         _activate(rows[name], mode, ssid=settings["ssid"] if mode in ("ap", "station") else "")
+        if mode == "station":
+            rows[name].update(security=settings.get("security", "wpa2-personal"), hidden=settings.get("hidden", False))
         _set_ipv4(rows[name], settings)
         return rows
 
@@ -173,6 +223,8 @@ class SimulatedNetwork:
             now = monotonic()
             self._expire(now)
             action = request["action"]
+            if action == "scan_wifi":
+                return self._scan(request["interface"], now, allow_ap_scan=request.get("allow_ap_scan", False))
             if action == "enable_wifi":
                 if self._candidate is not None:
                     raise NetworkConflict("Finish the pending network change before enabling Wi-Fi.")

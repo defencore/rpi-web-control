@@ -89,6 +89,18 @@ class NetworkTests(unittest.TestCase):
                 Network().apply(request)
             self.assertEqual(json.loads(sock.sendall.call_args.args[0]), request)
 
+    def test_scan_requires_boolean_ap_opt_in(self):
+        base = {"action": "scan_wifi", "interface": "wlan0"}
+        for extra in ({}, {"allow_ap_scan": False}, {"allow_ap_scan": True}):
+            with self.subTest(extra=extra):
+                settings = {**base, **extra}
+                self.assertEqual(normalize_request(settings), (settings, False))
+        for extra in ({"allow_ap_scan": "false"}, {"allow_ap_scan": 1}, {"restart_ap": True}):
+            with self.subTest(extra=extra):
+                reply, change = self.helper({**base, **extra})
+                self.assertEqual(reply["kind"], "invalid")
+                change.request_scan.assert_not_called()
+
     def test_ethernet_inventory_read_without_activating_the_privileged_helper(self):
         ethernet = {"name": "eth0", "state": "connected", "managed": True, "physical": True, "type": "ethernet"}
         with (patch("rpi_web_control.network._Manager"), patch("rpi_web_control.network._helper") as helper,

@@ -2,6 +2,7 @@ import contextlib
 import queue
 import sys
 import threading
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -49,6 +50,31 @@ class ValidationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_rules([a, b])
         validate_rules([a, dict(b, enabled=False)])
+
+    def test_stop_inputs_normalize_and_reserve_their_resources(self):
+        base = {"id": "gate", "type": "gpio", "pin": 17}
+        for stop, expected in (
+            ({"type": "gpio", "pin": 27}, {"type": "gpio", "pin": 27, "contact": "NO", "debounce_ms": 30}),
+            ({"type": "uart"}, {"type": "uart", "device": "/dev/serial0", "baud": 115200, "command": "STOP"}),
+        ):
+            with self.subTest(stop=stop):
+                rules = validate_rules([dict(base, stop=stop)])
+                self.assertEqual(rules[0]["stop"], expected)
+                self.assertEqual(validate_rules(rules), rules)
+                self.assertEqual(validate_rules([dict(base, stop=stop, stop_on_return=False)]), rules)
+                other = dict(stop, id="another")
+                with self.assertRaises(ValueError):
+                    validate_rules([other, *rules])
+                validate_rules([*rules, dict(other, enabled=False)])
+        for invalid in (None, "gpio", {}, {"type": "timer"}, {"type": "gpio", "pin": 17},
+                        {"type": "gpio", "pin": 27, "debounce_ms": -1}, {"type": "gpio", "pin": True},
+                        {"type": "uart", "command": "a\nb"}, {"type": "uart", "start_command": "OTHER"}):
+            with self.subTest(stop=invalid), self.assertRaises(ValueError):
+                validate_rules([dict(base, stop=invalid)])
+        for extra in ({"stop_on_return": True}, {"stop_on_return": False},
+                      {"stop": {"type": "uart"}, "stop_on_return": 0}):
+            with self.subTest(extra=extra), self.assertRaises(ValueError):
+                validate_rules([{**base, **extra}])
 
 
 class InputTests(unittest.TestCase):
@@ -169,6 +195,104 @@ class InputTests(unittest.TestCase):
 
 
 class ManagerTests(unittest.TestCase):
+    @contextlib.contextmanager
+    def latch(self, stop_rule, **options):
+        signals = {17: queue.Queue(), 27: queue.Queue(), "uart": queue.Queue()}
+        events = []
+
+        def reader(rule, stopping, ready, publish):
+            source = signals[rule.get("pin", "uart")]
+            ready()
+            while not stopping():
+                try:
+                    value, processed = source.get(timeout=0.02)
+                except queue.Empty:
+                    continue
+                try:
+                    if isinstance(value, OSError):
+                        raise value
+                    publish(value)
+                finally:
+                    processed.set()
+
+        def send(source, value):
+            processed = threading.Event()
+            signals[source].put((value, processed))
+            self.assertTrue(processed.wait(2))
+
+        def record(source, value):
+            self.assertEqual(source, "gate")
+            events.append(value)
+
+        rule = {"id": "gate", "type": "gpio", "pin": 17, "contact": "NC", "stop": stop_rule, **options}
+        manager = TriggerManager(record)
+        with patch.object(inputs, "_gpio_levels", reader), patch.object(inputs, "_uart_lines", reader):
+            try:
+                manager.configure([rule])
+                yield send, events, manager
+            finally:
+                manager.close()
+
+    def test_latched_gpio_stop_inhibits_start_and_requires_a_new_start_edge(self):
+        with self.latch({"type": "gpio", "pin": 27, "contact": "NC"}) as (send, events, manager):
+            send(17, True)  # Already open at startup.
+            self.assertEqual(manager.status()[0]["state"], "starting")
+            send(27, True)
+            self.assertEqual(manager.status()[0]["state"], "ready")
+            send(17, False)
+            send(17, True)  # Stop still open.
+            send(27, False)
+            self.assertEqual(events, [])
+            send(17, False)
+            send(17, True)
+            send(17, False)
+            self.assertEqual(events, [True])
+            send(17, True)
+            send(27, True)
+            send(27, False)
+            send(17, True)  # A held start does not retrigger after a stop.
+            self.assertEqual(events, [True, False])
+            send(17, False)
+            send(17, True)
+            manager.configure([])
+            self.assertEqual(events, [True, False, True, False])
+
+    def test_latched_uart_matches_exact_stop_and_releases_on_device_loss(self):
+        with self.latch({"type": "uart", "command": "REC OFF"}) as (send, events, manager):
+            send("uart", b"REC OFF")
+            send(17, False)
+            send(17, True)
+            send("uart", b"rec off")
+            self.assertEqual(events, [True])
+            send("uart", b"REC OFF")
+            send(17, True)
+            self.assertEqual(events, [True, False])
+            send(17, False)
+            send(17, True)
+            with self.assertLogs("rpi_web_control.triggers", "WARNING"):
+                send("uart", OSError("UART disconnected"))
+                deadline = time.monotonic() + 1
+                while events[-1] and time.monotonic() < deadline:
+                    time.sleep(0.01)
+            self.assertEqual(events, [True, False, True, False])
+            self.assertEqual(manager.status()[0]["error"], "UART disconnected")
+
+    def test_start_contact_return_and_external_stop_release_the_same_claim(self):
+        with self.latch({"type": "gpio", "pin": 27}, stop_on_return=True) as (send, events, manager):
+            send(17, False)
+            send(27, False)
+            send(17, True)
+            send(17, False)  # Returning START alone ends the first recording.
+            self.assertEqual(events, [True, False])
+            send(17, True)
+            send(27, True)   # Separate STOP ends the second while START is still active.
+            send(27, False)
+            send(17, True)
+            self.assertEqual(events, [True, False, True, False])
+            send(17, False)
+            send(17, True)
+            self.assertTrue(manager.status()[0]["active"])
+
     def test_retains_unmodified_workers_and_releases_before_replacement(self):
         events = queue.Queue()
         manager = TriggerManager(lambda source, active: events.put((source, active)))

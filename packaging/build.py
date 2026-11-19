@@ -44,17 +44,24 @@ def package_files():
         unit = f"{NAME}-recovery{suffix}"
         data[f"usr/lib/systemd/system/{unit}"] = (PACKAGING / "network" / unit, 0o644)
     docs = [ROOT / "AGENTS.md", ROOT / "tools/render_recording.py", ROOT / "tools/inspect-board.sh",
-            ROOT / "tools/check-camera-modes.py", *(ROOT / "docs").glob("*.md")]
+            ROOT / "tools/check-camera-modes.py", *(ROOT / "docs").glob("*.md"),
+            *(ROOT / "docs/hardware-results").glob("*.md"),
+            ROOT / "docs/assets/gpio-header-40pin.svg"]
     docs.extend(file for file in (ROOT / "skills").rglob("*") if file.suffix in {".md", ".py"})
     for doc in docs:
         data[f"usr/share/doc/{NAME}/{doc.relative_to(ROOT)}"] = (doc, 0o644)
-    for file in sorted((ROOT / "rpi_web_control").rglob("*")):
-        if file.is_file() and not file.is_symlink() and not any(
-            p.startswith(".") or p == "__pycache__" for p in file.relative_to(ROOT).parts
-        ) and file.suffix not in {".pyc", ".pyo"}:
+    runtime = ROOT / "rpi_web_control"
+    for file in runtime.glob("*.py"):
+        if file.is_file() and not file.is_symlink() and not file.name.startswith("."):
             data[f"{base}/{file.relative_to(ROOT)}"] = (file, 0o644)
-    for file in ("__main__.py", "static/index.html", "static/style.css", "static/app.js", "static/network.js",
-                 "camera.py", "triggers.py", "network.py", "network_profiles.py", "network_transaction.py",
+    for name in ("index.html", "style.css", "app.js", "device.js", "ui.js", "storage.js",
+                 "network.js", "wifi_station.js"):
+        file = runtime / "static" / name
+        if not file.is_file() or file.is_symlink():
+            raise RuntimeError(f"Missing static asset: {name}")
+        data[f"{base}/{file.relative_to(ROOT)}"] = (file, 0o644)
+    for file in ("__main__.py", "camera.py", "triggers.py", "network.py", "wifi_scan.py",
+                 "network_profiles.py", "network_transaction.py",
                  "network_sim.py", "network_recovery.py", "recovery_arp.py", "recovery_config.py",
                  "live.py", "firmware.py", "sensor_profiles.py", "storage.py",
                  "nvme.py", "nvme_client.py"):

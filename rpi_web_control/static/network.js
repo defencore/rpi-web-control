@@ -1,4 +1,5 @@
 import {byId, element, fact, setText} from "./ui.js";
+import {setupStation, validateWifiFields} from "./wifi_station.js";
 
 const modes = {ethernet: "Ethernet", station: "Wi-Fi station", ap: "Wi-Fi access point", bridge: "Ethernet + Wi-Fi bridge"};
 const methods = {auto: "DHCP client", manual: "Static address", shared: "Local DHCP server"};
@@ -158,6 +159,7 @@ function adapterCard(adapter, recovery) {
 export function setupNetworkPanel({api, act, notice, busy}) {
   const form = byId("network-form");
   const fields = form.elements;
+  const apInterface = byId("network-ap-interface");
   let devices = [];
   let recovery = null;
   let inventoryKey = null;
@@ -165,6 +167,7 @@ export function setupNetworkPanel({api, act, notice, busy}) {
   let applying = false;
   let deadline = 0;
   let timer = 0;
+  const station = setupStation({api, act, busy, consoleUrl, apply: async data => update(await api("network", data))});
 
   function interfaceChoices() {
     return devices.filter(item => item.physical && item.managed && ["ethernet", "wifi"].includes(item.type)
@@ -174,6 +177,11 @@ export function setupNetworkPanel({api, act, notice, busy}) {
 
   function apChoices() {
     return interfaceChoices().filter(row => row.type === "wifi" && row.ap && !row.controller);
+  }
+
+  function updateApAction() {
+    const selected = devices.find(row => row.name === apInterface.value);
+    setText("network-setup-ap", selected?.mode === "ap" ? "Edit access point" : "Set up access point");
   }
 
   function wifiControls(status) {
@@ -188,12 +196,11 @@ export function setupNetworkPanel({api, act, notice, busy}) {
     setup.hidden = hardwareOff || softwareOff || !status.available || !choices.length;
     enable.disabled = setup.disabled = Boolean(pending) || busy();
     byId("network-wifi-actions").hidden = enable.hidden && setup.hidden;
-    const picker = byId("network-ap-interface");
-    const preferred = choices.find(row => row.name === picker.value) ||
+    const preferred = choices.find(row => row.name === apInterface.value) ||
       choices.find(row => row.mode === "ap") || choices.find(row => row.state === "disconnected") || choices[0];
-    selectOptions(picker, choices.map(row => row.name), {}, preferred?.name || "");
+    selectOptions(apInterface, choices.map(row => row.name), {}, preferred?.name || "");
     byId("network-ap-interface-field").hidden = setup.hidden || choices.length < 2;
-    picker.disabled = setup.disabled;
+    apInterface.disabled = setup.disabled;
     let message;
     if (!radios.length) message = !status.available && !devices.length && status.message
       ? status.message : "No Wi-Fi adapter detected. Connect an AP-capable USB Wi-Fi adapter or use a Pi with onboard Wi-Fi.";
@@ -209,7 +216,7 @@ export function setupNetworkPanel({api, act, notice, busy}) {
       message = "The Wi-Fi adapter belongs to a network controller. Use the bridge settings for its access point.";
     else message = "No available Wi-Fi adapter reports access point support.";
     setText("network-wifi-message", message);
-    setText("network-setup-ap", choices.length === 1 && preferred.mode === "ap" ? "Edit access point" : "Set up access point");
+    updateApAction();
   }
 
   function guidance() {
@@ -246,7 +253,7 @@ export function setupNetworkPanel({api, act, notice, busy}) {
     const radios = available.filter(item => item.type === "wifi" && item.ap);
     const allowedModes = !adapter ? [] : adapter.type === "ethernet"
       ? (radios.length ? ["ethernet", "bridge"] : ["ethernet"])
-      : (adapter.ap ? ["station", "ap"] : ["station"]);
+      : (adapter.controller ? (adapter.ap ? ["ap"] : []) : (adapter.ap ? ["station", "ap"] : ["station"]));
     const currentMode = adapter?.controller === "br-rpi" && adapter.type === "ethernet" ? "bridge" : adapter?.mode;
     const initialMode = allowedModes.includes(currentMode) ? currentMode : allowedModes[0];
     selectOptions(fields.mode, allowedModes, modes, resetMode ? initialMode || "" : fields.mode.value);
@@ -257,8 +264,8 @@ export function setupNetworkPanel({api, act, notice, busy}) {
     selectOptions(fields.wifi_interface, radios.map(item => item.name), {}, resetMode || resetMethod
       ? initialRadio?.name || "" : fields.wifi_interface.value);
     byId("network-radio").hidden = fields.wifi_interface.disabled = !bridge;
-    byId("network-wireless").hidden = fields.ssid.disabled = fields.password.disabled = !wireless;
-    byId("network-password-help").hidden = !wireless;
+    byId("network-wireless").hidden = fields.ssid.disabled = !wireless;
+    byId("network-station-options").hidden = fields.security.disabled = fields.hidden_ssid.disabled = mode !== "station";
 
     const allowedMethods = mode === "ap" ? ["shared", "manual"]
       : mode === "station" ? ["auto", "manual"] : ["auto", "manual", "shared"];
@@ -274,10 +281,15 @@ export function setupNetworkPanel({api, act, notice, busy}) {
       fields.dns.value = existing && preferred !== "shared" ? (dns || []).join(", ") : "";
       const radio = bridge ? radios.find(item => item.name === fields.wifi_interface.value) : adapter;
       fields.ssid.value = wireless && (radio?.mode === mode || (bridge && radio?.mode === "ap")) ? radio.ssid || "" : "";
+      fields.security.value = mode === "station" && radio?.mode === "station" ? radio.security || "wpa2-personal" : "wpa2-personal";
+      fields.hidden_ssid.checked = mode === "station" && radio?.mode === mode && radio.hidden === true;
       fields.password.value = "";
     } else {
       selectOptions(fields.ipv4_method, allowedMethods, methods);
     }
+    const security = mode === "station" ? fields.security.value : "wpa2-personal";
+    byId("network-password-field").hidden = fields.password.disabled = !wireless || !security || security === "open";
+    byId("network-password-help").hidden = fields.password.disabled || security !== "wpa2-personal";
     const method = fields.ipv4_method.value;
     byId("network-address").hidden = fields.address.disabled = method === "auto";
     const automaticSubnet = mode === "ap" && method === "shared";
@@ -331,9 +343,11 @@ export function setupNetworkPanel({api, act, notice, busy}) {
       const aps = devices.filter(row => row.type === "wifi" && row.mode === "ap" && row.state === "connected");
       byId("network-active-aps").hidden = !aps.length;
       byId("network-active-aps").replaceChildren(...aps.map(ap => activeAccessPoint(ap, devices, recovery)));
+      station.showConnected(devices);
     }
     const available = interfaceChoices();
     wifiControls(status);
+    station.update(status);
     form.hidden = !status.available || !available.length;
     setText("network-message", status.message || (form.hidden ? "No managed Ethernet or Wi-Fi interface is available." : ""));
     const names = available.map(item => item.name);
@@ -347,12 +361,7 @@ export function setupNetworkPanel({api, act, notice, busy}) {
   }
 
   function validate() {
-    fields.ssid.setCustomValidity(!fields.ssid.disabled && fields.ssid.value &&
-      (new TextEncoder().encode(fields.ssid.value).length > 32 || /[\p{C}\p{Z}]/u.test(fields.ssid.value.replaceAll(" ", "")))
-      ? "Choose a network name of up to 32 UTF-8 bytes of printable text." : "");
-    fields.password.setCustomValidity(!fields.password.disabled && fields.password.value &&
-      !/^([ -~]{8,63}|[a-fA-F0-9]{64})$/.test(fields.password.value)
-      ? "Use an 8–63 character ASCII passphrase or a 64-digit hexadecimal key." : "");
+    validateWifiFields(fields.ssid, fields.password, fields.mode.value === "station" ? fields.security.value : "wpa2-personal");
     fields.address.setCustomValidity(!fields.address.disabled && (fields.address.required || fields.address.value.trim())
       && !targetNetwork(fields.address.value)
       ? "Enter an IPv4 address with a prefix, for example 192.168.10.1/24." : "");
@@ -363,13 +372,14 @@ export function setupNetworkPanel({api, act, notice, busy}) {
   }
 
   fields.interface.addEventListener("change", () => editOptions(true));
+  apInterface.addEventListener("change", updateApAction);
   byId("network-enable-wifi").addEventListener("click", () => {
     if (busy() || pending) return;
     act(async () => update(await api("network", {action: "enable_wifi"})), "Wi-Fi enabled.");
   });
   byId("network-setup-ap").addEventListener("click", () => {
     if (busy() || pending) return;
-    const radio = apChoices().find(row => row.name === byId("network-ap-interface").value);
+    const radio = apChoices().find(row => row.name === apInterface.value);
     if (!radio) return;
     fields.interface.value = radio.name;
     editOptions(true);
@@ -385,6 +395,7 @@ export function setupNetworkPanel({api, act, notice, busy}) {
     fields.ssid.focus({preventScroll: true});
   });
   fields.mode.addEventListener("change", () => editOptions(false, true));
+  fields.security.addEventListener("change", () => { fields.password.value = ""; editOptions(); });
   fields.ipv4_method.addEventListener("change", () => { editOptions(); validate(); });
   fields.wifi_interface.addEventListener("change", () => { fields.password.value = ""; editOptions(); });
   form.addEventListener("input", () => { validate(); guidance(); });
@@ -398,7 +409,11 @@ export function setupNetworkPanel({api, act, notice, busy}) {
       gateway: fields.gateway.disabled ? "" : fields.gateway.value.trim(), dns: fields.dns.disabled ? [] : nameservers()};
     if (!fields.ssid.disabled) {
       data.ssid = fields.ssid.value;
-      data.password = fields.password.value;
+      data.password = fields.password.disabled ? "" : fields.password.value;
+    }
+    if (data.mode === "station") {
+      data.security = fields.security.value;
+      data.hidden = fields.hidden_ssid.checked;
     }
     if (!fields.wifi_interface.disabled) data.wifi_interface = fields.wifi_interface.value;
     act(async () => {
@@ -425,6 +440,7 @@ export function setupNetworkPanel({api, act, notice, busy}) {
   }
 
   return {update, reset() {
+    station.reset();
     form.reset();
     devices = [];
     inventoryKey = pending = null;

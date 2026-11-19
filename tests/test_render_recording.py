@@ -40,8 +40,8 @@ class ExportTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
 
-    def recording(self, fps, *, gap=False):
-        settings = {"width": 320, "height": 160, "fps": fps, "osd": False}
+    def recording(self, fps, *, gap=False, height=160):
+        settings = {"width": 320, "height": height, "fps": fps, "osd": False}
         source = SimSource()
         source.start(settings, None)
         clip = Recording(self.root, settings, "simulated", "Test", "manual")
@@ -52,6 +52,11 @@ class ExportTests(unittest.TestCase):
             clip.write(frame, frame.jpeg(False) if fps <= 60 else None)
         clip.close()
         return clip.path
+
+    def test_single_timestamp_line_fits_minimum_capture_height(self):
+        session = self.recording(240, height=16)
+        output = self.root / "narrow.mp4"
+        self.assertEqual(render(parser().parse_args([str(session), str(output)]))["frames"], 4)
 
     def test_render_both_formats_and_pixel_overlay(self):
         for fps in (30, 240):

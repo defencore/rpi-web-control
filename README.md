@@ -42,8 +42,8 @@ The console compares the Pi's clock with the clock on the device running the bro
 | Stream | Choose a receiver IP, UDP port and optional stream FPS limit. Copy the GStreamer playback command and compare capture rate, sender rate and drop counters. |
 | Camera | Run a capture test for one or all advertised sensor modes, compare measured FPS, and set output size, bit depth, FPS and OSD. Choose or restore a sensor boot profile and request a reboot. [Supported modules and vendor profiles](docs/firmware.md#built-in-camera-profiles) |
 | Storage | See the active recording directory and choose **Record to USB** or **Record to NVMe** for a ready drive. Expand disk setup to mount or prepare a drive. |
-| Triggers | Add periodic recording windows, NO/NC contacts, numeric sensor thresholds with hysteresis, or UART start/stop commands. |
-| Network | Create a Wi-Fi access point for a phone or laptop, join an existing network, or bridge Wi-Fi to Ethernet. Direct-cable recovery uses `192.168.55.100` by default. [Connect a client to the Pi's Wi-Fi](docs/network.md#create-a-wi-fi-access-point) |
+| Triggers | Record while a contact is open or closed, or start on a contact and stop on a second GPIO or serial command. Timer, numeric sensor and UART rules are also available. [40-pin wiring diagram and setup examples](docs/triggers.md#gpio) |
+| Network | Scan nearby Wi-Fi networks and connect the Pi to a router while keeping a fixed Ethernet address. The Pi can also host or bridge an access point. Direct-cable recovery uses `192.168.55.100` by default. [Join Wi-Fi](docs/network.md#join-an-existing-wi-fi-network) · [Host an access point](docs/network.md#create-a-wi-fi-access-point) |
 
 The frame rate setting applies to capture. Browser preview shares the latest JPEG among subscribers, at up to eight updates per second. Closing the preview or losing a browser connection leaves an active recording running. The last manual or trigger release closes the clip. A capture failure ends the affected session. While a previously active source still requests recording, the service attempts to reopen a new session with backoff. Changing camera settings or storage during an active recording returns a conflict.
 
@@ -80,9 +80,10 @@ python3 skills/rpi-capture-development/scripts/check_recording.py /path/to/sessi
 
 ## Convert a downloaded recording to MP4
 
-On **Recordings**, select **Download recording (.zip)** for the session. The ZIP contains the original video, frame timestamps and manifest. From the checkout on your workstation, pass the ZIP directly to the converter. Substitute the downloaded filename.
+On **Recordings**, select **Download recording (.zip)** for the session. The ZIP contains the original video, frame timestamps and manifest. On the computer running the converter, install FFmpeg with ffprobe and activate your Python 3.11+ environment. Install Pillow once in that environment, then pass the downloaded ZIP to the converter.
 
 ```sh
+python3 -m pip install Pillow
 python3 tools/render_recording.py "$HOME/Downloads/20261119T120000Z-012345abcdef.zip" capture.mp4
 ```
 
@@ -120,14 +121,14 @@ The API accepts requests without a token by default. When token protection is en
 | GET /api/stream.mjpg | Multipart JPEG stream while preview is enabled |
 | POST /api/preview, POST /api/recording | Set `{"enabled":true}` or `{"enabled":false}` |
 | POST /api/config | Save one or more sections. Camera fields merge, storage takes `{"directory":"/absolute/path"}`, and triggers take the complete rule list. |
-| POST /api/network | Stage network settings, confirm a working connection or roll back a pending change through the network helper |
+| POST /api/network | Enable Wi-Fi, scan nearby networks on a selected radio, stage a connection and confirm it or roll it back. [Network API](docs/network.md#api) |
 | POST /api/logout | End the browser session using an empty JSON object |
 
 ## Extending the project
 
 Start with [AGENTS.md](AGENTS.md) and its two versioned project skills. The camera worker owns device buffers and recording boundaries. Input adapters publish recording claims, the application coordinates those claims, and the web layer exposes the same operations to the dashboard and API clients. Hardware imports are lazy, and the browser assets run directly from the package without a build step or external services.
 
-- [Trigger adapter contract, configuration examples and electrical contact semantics](docs/triggers.md)
+- [Recording triggers, GPIO pinout, contact wiring and serial command examples](docs/triggers.md)
 - [Ethernet, Wi-Fi, bridged access points and rollback](docs/network.md)
 - [Sensor profiles, boot configuration and recovery](docs/firmware.md)
 - [NVMe, USB, microSD and SPI flash recording destinations](docs/storage.md)

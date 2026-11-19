@@ -57,7 +57,9 @@ class Settings:
             # and selecting another volume. Every recording rechecks the live policy.
             result["storage"] = {"directory": value if restoring else str(self.directory(value))}
         if "triggers" in patch:
-            result["triggers"] = validate_rules(patch["triggers"])
+            # An alias can be reassigned between boots. Keep saved rules editable
+            # if two previously separate ports now point to the same device.
+            result["triggers"] = validate_rules(patch["triggers"], resolve_uart_aliases=not restoring)
         return result
 
     def load(self):

@@ -121,7 +121,7 @@ if [[ ! $staging =~ ^/tmp/rpi-web-control-install\.[a-zA-Z0-9]{8}$ ]]; then
 fi
 remote_dir=$staging
 COPYFILE_DISABLE=1 tar -cf - -C "$root/tools" install-package.sh -C "$root/dist" "$archive" |
-    on_board -T "tar -xf - -C '$remote_dir'" 2>&1 | tee -a "$report/install.log"
+    on_board -T "tar -xmf - -C '$remote_dir'" 2>&1 | tee -a "$report/install.log"
 apply="cd '$remote_dir' && sh ./install-package.sh '$version' '$digest'"
 if [[ -t 0 ]]; then
     on_board -t "$apply" 2>&1 | tee -a "$report/install.log"

@@ -3,6 +3,7 @@
 import logging
 import re
 import threading
+from os.path import realpath
 from pathlib import PurePosixPath
 
 from .trigger_inputs import INPUTS
@@ -10,7 +11,7 @@ from .trigger_inputs import INPUTS
 LOG = logging.getLogger(__name__)
 FIELDS = {
     "timer": {"interval_s", "duration_s"},
-    "gpio": {"pin", "contact", "debounce_ms"},
+    "gpio": {"pin", "contact", "debounce_ms", "stop", "stop_on_return"},
     "sensor": {"path", "comparison", "threshold", "hysteresis", "poll_ms"},
     "uart": {"device", "baud", "start_command", "stop_command"},
 }
@@ -35,6 +36,46 @@ def _choice(value, field, options):
     return value
 
 
+def _gpio_fields(rule):
+    return {
+        "pin": _number(rule.get("pin"), "pin", 0, 27, integer=True),
+        "contact": _choice(rule.get("contact", "NO"), "contact", ("NO", "NC")),
+        "debounce_ms": _number(rule.get("debounce_ms", 30), "debounce_ms", 0, 1000, True),
+    }
+
+
+def _uart_port(rule):
+    device = rule.get("device", "/dev/serial0")
+    if not isinstance(device, str) or len(device) > 256 or not UART_DEVICE.fullmatch(device):
+        raise ValueError("device must name a UART or a USB serial port under /dev.")
+    if device.rsplit("/", 1)[-1] in (".", ".."):
+        raise ValueError("device must name a serial port.")
+    baud = _choice(rule.get("baud", 115200), "baud",
+                   (1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600))
+    if type(baud) is not int:
+        raise ValueError("baud must be an integer.")
+    return {"device": device, "baud": baud}
+
+
+def _command(command):
+    if not isinstance(command, str) or not re.fullmatch(r"[ -~]{1,64}", command):
+        raise ValueError("UART commands must contain 1 to 64 printable ASCII characters.")
+    return command
+
+
+def _stop_input(rule, start_pin):
+    if not isinstance(rule, dict):
+        raise ValueError("Choose a GPIO contact or a UART command as the stop input.")
+    if rule.get("type") == "gpio" and rule.keys() <= {"type", "pin", "contact", "debounce_ms"}:
+        fields = _gpio_fields(rule)
+        if fields["pin"] == start_pin:
+            raise ValueError("Use different GPIO pins for start and stop.")
+        return {"type": "gpio", **fields}
+    if rule.get("type") == "uart" and rule.keys() <= {"type", "device", "baud", "command"}:
+        return {"type": "uart", **_uart_port(rule), "command": _command(rule.get("command", "STOP"))}
+    raise ValueError("Invalid fields for the GPIO rule's stop input.")
+
+
 def _rule_fields(rule):
     kind = rule["type"]
     if kind == "timer":
@@ -44,11 +85,15 @@ def _rule_fields(rule):
             raise ValueError("duration_s must be shorter than interval_s.")
         return {"interval_s": interval, "duration_s": duration}
     if kind == "gpio":
-        return {
-            "pin": _number(rule.get("pin"), "pin", 0, 27, integer=True),
-            "contact": _choice(rule.get("contact", "NO"), "contact", ("NO", "NC")),
-            "debounce_ms": _number(rule.get("debounce_ms", 30), "debounce_ms", 0, 1000, True),
-        }
+        fields = _gpio_fields(rule)
+        if "stop" in rule:
+            fields["stop"] = _stop_input(rule["stop"], fields["pin"])
+        if "stop_on_return" in rule:
+            if "stop" not in rule or type(rule["stop_on_return"]) is not bool:
+                raise ValueError("stop_on_return must be a boolean on a GPIO rule with a separate stop input.")
+            if rule["stop_on_return"]:
+                fields["stop_on_return"] = True
+        return fields
     if kind == "sensor":
         raw = rule.get("path")
         if not isinstance(raw, str) or not raw.isascii() or not raw.isprintable() or len(raw) > 512:
@@ -63,25 +108,13 @@ def _rule_fields(rule):
             "hysteresis": _number(rule.get("hysteresis", 0), "hysteresis", 0, 1e300),
             "poll_ms": _number(rule.get("poll_ms", 250), "poll_ms", 20, 60000, True),
         }
-    device = rule.get("device", "/dev/serial0")
-    if not isinstance(device, str) or len(device) > 256 or not UART_DEVICE.fullmatch(device):
-        raise ValueError("device must name a UART or a USB serial port under /dev.")
-    if device.rsplit("/", 1)[-1] in (".", ".."):
-        raise ValueError("device must name a serial port.")
-    baud = _choice(rule.get("baud", 115200), "baud",
-                   (1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600))
-    if type(baud) is not int:
-        raise ValueError("baud must be an integer.")
-    start, stop = rule.get("start_command", "START"), rule.get("stop_command", "STOP")
-    for command in (start, stop):
-        if not isinstance(command, str) or not re.fullmatch(r"[ -~]{1,64}", command):
-            raise ValueError("UART commands must contain 1 to 64 printable ASCII characters.")
+    start, stop = _command(rule.get("start_command", "START")), _command(rule.get("stop_command", "STOP"))
     if start == stop:
         raise ValueError("Start and stop commands must differ.")
-    return {"device": device, "baud": baud, "start_command": start, "stop_command": stop}
+    return {**_uart_port(rule), "start_command": start, "stop_command": stop}
 
 
-def validate_rules(rules):
+def validate_rules(rules, *, resolve_uart_aliases=False):
     """Normalize a complete rule list without opening hardware or starting workers."""
     if not isinstance(rules, list) or len(rules) > 32:
         raise ValueError("Provide a list of up to 32 trigger rules.")
@@ -106,13 +139,19 @@ def validate_rules(rules):
         if rule.keys() - {"id", "type", "enabled"} - FIELDS[kind]:
             raise ValueError(f"Unexpected field for trigger {rule_id}.")
         fields = _rule_fields(rule)
-        resource_key = {"gpio": "pin", "uart": "device"}.get(kind)
-        if enabled and resource_key:
-            resource = (kind, fields[resource_key])
-            if resource in resources:
-                raise ValueError(f"Enabled rules cannot share a {kind} input.")
-            resources.add(resource)
-        normalized.append({"id": rule_id, "type": kind, "enabled": enabled, **fields})
+        result = {"id": rule_id, "type": kind, "enabled": enabled, **fields}
+        if enabled:
+            for source in (result, result.get("stop", {})):
+                resource_key = {"gpio": "pin", "uart": "device"}.get(source.get("type"))
+                if resource_key:
+                    value = source[resource_key]
+                    if source["type"] == "uart" and resolve_uart_aliases:
+                        value = realpath(value)
+                    resource = (source["type"], value)
+                    if resource in resources:
+                        raise ValueError(f"Enabled rules cannot share a {source['type']} input.")
+                    resources.add(resource)
+        normalized.append(result)
     return normalized
 
 
@@ -138,7 +177,7 @@ class _Worker:
             self.state, self.error = "ready", None
 
     def publish(self, active):
-        # Only the worker thread changes the claim. Driver callbacks never hold manager locks.
+        # Each adapter serializes its claim changes and finishes its I/O before the final release.
         if active == self.active or (active and self.stop.is_set()):
             return
         self.callback(self.rule["id"], active)

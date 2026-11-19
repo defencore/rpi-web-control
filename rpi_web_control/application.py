@@ -303,9 +303,10 @@ class Application:
                 camera_changed = candidate["camera"] != previous["camera"]
                 storage_changed = candidate["storage"] != previous["storage"]
                 camera_status = self.camera.status()
+                recording_requested = camera_status["recording"] or bool(self.sources)
                 if camera_changed and camera_status["live"]["enabled"]:
                     raise Conflict("Stop the live stream before changing camera settings.")
-                if (camera_changed or storage_changed) and camera_status["recording"]:
+                if (camera_changed or storage_changed) and recording_requested:
                     raise Conflict("Stop recording before changing the camera or recording directory.")
                 identity = self.store.storage_identity
                 if "storage" in patch:
@@ -321,7 +322,7 @@ class Application:
                             raise ValueError("The selected volume is no longer mounted at its original mount point.")
                     with self.storage.open_target(directory, expected) as target:
                         identity = target.identity
-                    if identity != self.store.storage_identity and camera_status["recording"]:
+                    if identity != self.store.storage_identity and recording_requested:
                         raise Conflict("Stop recording before selecting another volume.")
                 if candidate == previous and identity == self.store.storage_identity:
                     return

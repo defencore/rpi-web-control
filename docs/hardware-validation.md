@@ -2,7 +2,7 @@
 
 Use this procedure on a test Raspberry Pi 5 and a Compute Module 5 with its intended carrier. Record each result against the exact board, sensor, lens, carrier, storage device and OS image. Mark untested combinations as pending.
 
-[Measured IMX577 capture rates on a Raspberry Pi 5 Model B Rev 1.1](pi5-imx577-results.md)
+Previous Raspberry Pi 5 bench results include [IMX577 capture rates](pi5-imx577-results.md) and [OV9281 preview at several sensor settings](hardware-results/pi5-ov9281-preview.md).
 
 ## First SSH connection and inventory
 
@@ -21,14 +21,14 @@ Check the reported model and arm64 package architecture, OS release, boot volume
 From the workstation, copy the verified archive to the operator's home directory and open an SSH shell on the target.
 
 ```sh
-scp dist/rpi-web-control_0.7.0-1_arm64.deb operator@capture-pi.local:
+scp dist/rpi-web-control_0.9.0-2_arm64.deb operator@capture-pi.local:
 ssh operator@capture-pi.local
 ```
 
 On the Pi, run the following commands from the operator's home directory. When upgrading an existing installation, stop active recordings first.
 
 ```sh
-sudo apt install ./rpi-web-control_0.7.0-1_arm64.deb
+sudo apt install ./rpi-web-control_0.9.0-2_arm64.deb
 systemctl is-active rpi-web-control.service
 sudo openssl x509 -in /etc/rpi-web-control/tls.crt -noout -fingerprint -sha256
 ```
@@ -123,6 +123,7 @@ The sensor timestamp refers to the first active row and uses Linux BOOTTIME. Jou
 | --- | --- | --- |
 | Timer | Use a short interval and duration. Observe two cycles. | Each cycle starts and ends a recording claim. |
 | GPIO NO/NC | Wire a dry contact to the selected BCM pin and ground. Test normally open, then normally closed behavior on the actual carrier. Exercise contact bounce. | Idle input, asserted input and release match the selected polarity and debounce. |
+| GPIO with separate stop | Follow the [contact wiring examples](triggers.md#gpio). Start on GPIO17 and stop first with GPIO27, then with a serial line. Repeat with the start held open and with manual recording active. | At initial arm an open start contact stays idle. Each new start opens one clip. The selected stop releases only its own rule, and a held start requires a new contact cycle. |
 | Sensor | Select a readable supported sysfs sensor. Move its reading across the threshold and recovery boundary. | Log raw readings and units, both transitions, and behavior inside hysteresis. |
 | UART | Use the configured serial interface and baud rate. Send the configured start and stop lines. | Both commands change the rule state. An unrelated line leaves recording ownership unchanged. |
 | Overlap | Start manually, assert a rule, release manual control, then release the rule. Repeat with two rules. | One uninterrupted clip covers the interval with at least one active source. |
@@ -141,15 +142,17 @@ Exercise a configured input that is absent or unavailable. Check the error again
 - With the package defaults, open the console in a fresh browser session and start and stop a recording without entering a token. Enable token sign-in, restart the service and check that a request to `/api/status` without credentials returns HTTP 401. Sign in and repeat the recording check. After upgrading, verify the configured access mode, credentials, earlier recordings and clean service shutdown.
 - For each board and adapter, record interface names, driver, NetworkManager version, client addressing and observed connectivity. From Ethernet, trial a fixed IP, reconnect to the new address, confirm and repeat the connection after reboot. Trial DHCP and let it expire, then check that the previous IP works again. On a wired-only CM5, exercise Ethernet with the radio absent.
 - Connect a workstation directly at `192.168.55.10/24` with no DHCP server. After boot and again after reconnecting the cable, open `https://192.168.55.100:8080`. Check the **Wired recovery** state, including **Already assigned** when the primary address is also `.100`. Repeat with the cable in the managed bridge and verify that the main address, gateway and DNS remain usable. [Wired recovery procedure](network.md#connect-by-ethernet-when-the-main-address-is-unknown)
-- From Ethernet with the software Wi-Fi radio off, open **Network → Wi-Fi access point**, enable Wi-Fi and start a standalone AP. Join from a phone, check its DHCP lease, open the displayed URL over Wi-Fi and confirm the trial. Check the saved SSID after reboot. Repeat with automatic rollback and verify the previous profile and wired console are usable. On a wired-only board, check the message for a missing radio. [AP setup](network.md#create-a-wi-fi-access-point)
-- Switch the Pi to station mode and reconnect over the target network. Check rollback after an incorrect station password. For a bridge, verify `br-rpi` owns the Pi's address and both selected links appear in `ip link show master br-rpi`. Connect one client by cable and one by Wi-Fi. Verify HTTPS access from both, client-to-client communication and the source of their DHCP leases. Test upstream DHCP on an existing LAN and Pi-provided DHCP on an isolated LAN. Let an unconfirmed bridge change expire and check both ports return to their previous state. [Network setup](network.md)
+- From Ethernet with the software Wi-Fi radio off, open **Network → Wi-Fi access point**, enable Wi-Fi and start a standalone AP. Join from a phone, check its DHCP lease, open the displayed URL over Wi-Fi and confirm the trial. With a client attached, request a scan on the AP radio. Cancel the warning and verify that no scan starts. Confirm a second request and record whether the driver returns neighboring networks. Verify the AP profile, client DHCP and Ethernet access afterwards. Check the saved SSID after reboot. Repeat with automatic rollback and verify the previous profile and wired console are usable. On a wired-only board, check the message for a missing radio. [AP setup](network.md#create-a-wi-fi-access-point)
+- With Ethernet at a known static address, scan from a Wi-Fi adapter, select an SSID, enter its password and connect. Check the DHCP lease and open the console from the wireless LAN. Verify the wired IP and the separate Wi-Fi IP during the trial, after confirmation and after reboot. Repeat with an incorrect password, a hidden SSID and an expired trial. [Join Wi-Fi](network.md#join-an-existing-wi-fi-network)
+- For a bridge, verify `br-rpi` owns the Pi's address and both selected links appear in `ip link show master br-rpi`. Connect one client by cable and one by Wi-Fi. Verify HTTPS access from both, client-to-client communication and the source of their DHCP leases. Test upstream DHCP on an existing LAN and Pi-provided DHCP on an isolated LAN. Let an unconfirmed bridge change expire and check both ports return to their previous state. [Network setup](network.md)
 
 Keep results as an acceptance worksheet with columns for board/carrier, sensor mode, destination, requested rate, measured rate, maximum interval, unexplained gaps, OSD/preview state, duration and pass/fail. Retain the clip, sidecar, saved journal entries and package version for each reported throughput result.
 
 ### Wi-Fi inventory before the access-point update
 
-On 19 November 2026 the connected Raspberry Pi 5 Model B Rev 1.1 reported a managed `wlan0` with AP capability. NetworkManager reported hardware wireless enabled and software wireless disabled. The configured WLAN country was `UA`. NetworkManager 1.52.1, `python3-dbus` and `dnsmasq-base` were installed. The application's AP profile serialized with the expected D-Bus signature on the Pi. NetworkManager's offline check also accepted an equivalent WPA-protected profile with shared IPv4 at `10.42.0.1/24`. The live Ethernet stream continued during these checks. Physical client association and DHCP remain to be measured on this board.
+On 19 November 2026 the connected Raspberry Pi 5 Model B Rev 1.1 reported a managed `wlan0` with AP capability. NetworkManager reported hardware wireless enabled and software wireless disabled. The configured WLAN country was `UA`. NetworkManager 1.52.1, `python3-dbus` and `dnsmasq-base` were installed. The application's AP profile serialized with the expected D-Bus signature on the Pi. NetworkManager's offline check also accepted an equivalent WPA-protected profile with shared IPv4 at `10.42.0.1/24`. The live Ethernet stream continued during these checks.
 
+The operator subsequently reported that a client joined the Pi's AP and received a DHCP lease. The station picker returned no networks on their setup. Repeating the station scan on physical hardware and recording the adapter mode, NetworkManager's cached AP count and the picker result is still pending. [Empty scan checks](network.md#if-the-list-of-nearby-networks-is-empty)
 
 ## Validate a new sensor, volume and remote stream
 

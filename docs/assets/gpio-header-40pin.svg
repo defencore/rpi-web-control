@@ -1,0 +1,339 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="1058" viewBox="0 0 820 1058" role="img" aria-labelledby="title description">
+  <title id="title">Raspberry Pi 40-pin GPIO header with dry-contact recording inputs</title>
+  <desc id="description">Component-side view of the Raspberry Pi 5 and CM5 IO Board J8 header. Align the board’s pin 1 mark at the upper left. Odd physical pins run down the left column; even pins run down the right. GPIO17 is physical pin 11; connect contact A between it and ground pin 9. The optional second contact B connects GPIO27, pin 13, to ground pin 14. Both switches are drawn open. The inputs use internal pull-ups.</desc>
+  <style>
+    text { font-family: "DejaVu Sans", Arial, sans-serif; fill: #162e36; }
+    .heading { font-size: 29px; font-weight: bold; }
+    .body { font-size: 15px; }
+    .muted { fill: #425a60; }
+    .col { fill: #425a60; font-size: 12px; font-weight: bold; letter-spacing: 1px; }
+    .signal { font-size: 17px; font-weight: bold; }
+    .use { font-size: 15px; fill: #425a60; }
+    .pin { text-anchor: middle; font-size: 13px; font-weight: bold; }
+    .contact-a { fill: #006554; }
+    .contact-b { fill: #6740a3; }
+    .supply { fill: #a24213; }
+    .ground { fill: #495963; }
+    .reserved { fill: #744b19; }
+    .wire { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+  </style>
+  <rect width="820" height="1058" rx="12" fill="#ffffff"/>
+  <text x="28" y="47" class="heading">Raspberry Pi 40-pin GPIO header</text>
+  <text x="28" y="74" class="body muted">Raspberry Pi 5 · Compute Module 5 IO Board (J8). Check the pinout on other carriers.</text>
+  <path d="M28 91H792" stroke="#c9d4d3"/>
+  <text x="28" y="115" class="body">View from the component side. Rotate the board so its pin 1 mark is at the upper left.</text>
+  <text x="36" y="151" class="col">USE / EXAMPLE</text>
+  <text x="337" y="151" class="col" text-anchor="end">SIGNAL</text>
+  <text x="410" y="151" class="col" text-anchor="middle">PIN</text>
+  <text x="483" y="151" class="col">SIGNAL</text>
+  <text x="592" y="151" class="col">USE / EXAMPLE</text>
+  <rect x="360" y="164" width="100" height="661" rx="13" fill="#163942"/>
+  <path d="M28 182H349 M471 182H792" fill="none" stroke="#f1f5f4" stroke-width="31"/>
+  <g id="pin-1">
+    <title>Pin 1 · 3.3 V</title>
+    <rect x="374" y="169" width="26" height="26" rx="3" fill="#ffe4cc"/>
+    <text x="387" y="186.5" class="pin">1</text>
+    <text x="337" y="187" class="signal supply" text-anchor="end">3.3 V</text>
+  </g>
+  <g id="pin-2">
+    <title>Pin 2 · 5 V</title>
+    <circle cx="433" cy="182" r="12.5" fill="#ffe4cc"/>
+    <text x="433" y="186.5" class="pin">2</text>
+    <text x="483" y="187" class="signal supply">5 V</text>
+  </g>
+  <g id="pin-3">
+    <title>Pin 3 · GPIO2 · I²C1 SDA</title>
+    <circle cx="387" cy="215" r="12.5" fill="#ffffff"/>
+    <text x="387" y="219.5" class="pin">3</text>
+    <text x="337" y="220" class="signal " text-anchor="end">GPIO2</text>
+    <text x="36" y="220" class="use">I²C1 SDA</text>
+  </g>
+  <g id="pin-4">
+    <title>Pin 4 · 5 V</title>
+    <circle cx="433" cy="215" r="12.5" fill="#ffe4cc"/>
+    <text x="433" y="219.5" class="pin">4</text>
+    <text x="483" y="220" class="signal supply">5 V</text>
+  </g>
+  <path d="M28 248H349 M471 248H792" fill="none" stroke="#f1f5f4" stroke-width="31"/>
+  <g id="pin-5">
+    <title>Pin 5 · GPIO3 · I²C1 SCL</title>
+    <circle cx="387" cy="248" r="12.5" fill="#ffffff"/>
+    <text x="387" y="252.5" class="pin">5</text>
+    <text x="337" y="253" class="signal " text-anchor="end">GPIO3</text>
+    <text x="36" y="253" class="use">I²C1 SCL</text>
+  </g>
+  <g id="pin-6">
+    <title>Pin 6 · GND</title>
+    <circle cx="433" cy="248" r="12.5" fill="#d3dfe0"/>
+    <text x="433" y="252.5" class="pin">6</text>
+    <text x="483" y="253" class="signal ground">GND</text>
+  </g>
+  <g id="pin-7">
+    <title>Pin 7 · GPIO4 · GPCLK0</title>
+    <circle cx="387" cy="281" r="12.5" fill="#ffffff"/>
+    <text x="387" y="285.5" class="pin">7</text>
+    <text x="337" y="286" class="signal " text-anchor="end">GPIO4</text>
+    <text x="36" y="286" class="use">GPCLK0</text>
+  </g>
+  <g id="pin-8">
+    <title>Pin 8 · GPIO14 · UART0 TX</title>
+    <circle cx="433" cy="281" r="12.5" fill="#ffffff"/>
+    <text x="433" y="285.5" class="pin">8</text>
+    <text x="483" y="286" class="signal ">GPIO14</text>
+    <text x="592" y="286" class="use">UART0 TX</text>
+  </g>
+  <path d="M28 314H349 M471 314H792" fill="none" stroke="#f1f5f4" stroke-width="31"/>
+  <g id="pin-9">
+    <title>Pin 9 · GND · Contact A return</title>
+    <rect x="28" y="299" width="321" height="30" rx="5" fill="#d4f2e7"/>
+    <circle cx="387" cy="314" r="12.5" fill="#d4f2e7"/>
+    <text x="387" y="318.5" class="pin">9</text>
+    <text x="337" y="319" class="signal contact-a" text-anchor="end">GND</text>
+    <text x="36" y="319" class="use contact-a">Contact A return</text>
+  </g>
+  <g id="pin-10">
+    <title>Pin 10 · GPIO15 · UART0 RX</title>
+    <circle cx="433" cy="314" r="12.5" fill="#ffffff"/>
+    <text x="433" y="318.5" class="pin">10</text>
+    <text x="483" y="319" class="signal ">GPIO15</text>
+    <text x="592" y="319" class="use">UART0 RX</text>
+  </g>
+  <g id="pin-11">
+    <title>Pin 11 · GPIO17 · Contact A input</title>
+    <rect x="28" y="332" width="321" height="30" rx="5" fill="#d4f2e7"/>
+    <circle cx="387" cy="347" r="12.5" fill="#d4f2e7"/>
+    <text x="387" y="351.5" class="pin">11</text>
+    <text x="337" y="352" class="signal contact-a" text-anchor="end">GPIO17</text>
+    <text x="36" y="352" class="use contact-a">Contact A input</text>
+  </g>
+  <g id="pin-12">
+    <title>Pin 12 · GPIO18 · I²S bit clock · PWM0[2]</title>
+    <circle cx="433" cy="347" r="12.5" fill="#ffffff"/>
+    <text x="433" y="351.5" class="pin">12</text>
+    <text x="483" y="352" class="signal ">GPIO18</text>
+    <text x="592" y="352" class="use">I²S bit clock · PWM0[2]</text>
+  </g>
+  <path d="M28 380H349 M471 380H792" fill="none" stroke="#f1f5f4" stroke-width="31"/>
+  <g id="pin-13">
+    <title>Pin 13 · GPIO27 · Contact B input</title>
+    <rect x="28" y="365" width="321" height="30" rx="5" fill="#ece3fa"/>
+    <circle cx="387" cy="380" r="12.5" fill="#ece3fa"/>
+    <text x="387" y="384.5" class="pin">13</text>
+    <text x="337" y="385" class="signal contact-b" text-anchor="end">GPIO27</text>
+    <text x="36" y="385" class="use contact-b">Contact B input</text>
+  </g>
+  <g id="pin-14">
+    <title>Pin 14 · GND · Contact B return</title>
+    <rect x="471" y="365" width="321" height="30" rx="5" fill="#ece3fa"/>
+    <circle cx="433" cy="380" r="12.5" fill="#ece3fa"/>
+    <text x="433" y="384.5" class="pin">14</text>
+    <text x="483" y="385" class="signal contact-b">GND</text>
+    <text x="592" y="385" class="use contact-b">Contact B return</text>
+  </g>
+  <g id="pin-15">
+    <title>Pin 15 · GPIO22</title>
+    <circle cx="387" cy="413" r="12.5" fill="#ffffff"/>
+    <text x="387" y="417.5" class="pin">15</text>
+    <text x="337" y="418" class="signal " text-anchor="end">GPIO22</text>
+  </g>
+  <g id="pin-16">
+    <title>Pin 16 · GPIO23</title>
+    <circle cx="433" cy="413" r="12.5" fill="#ffffff"/>
+    <text x="433" y="417.5" class="pin">16</text>
+    <text x="483" y="418" class="signal ">GPIO23</text>
+  </g>
+  <path d="M28 446H349 M471 446H792" fill="none" stroke="#f1f5f4" stroke-width="31"/>
+  <g id="pin-17">
+    <title>Pin 17 · 3.3 V</title>
+    <circle cx="387" cy="446" r="12.5" fill="#ffe4cc"/>
+    <text x="387" y="450.5" class="pin">17</text>
+    <text x="337" y="451" class="signal supply" text-anchor="end">3.3 V</text>
+  </g>
+  <g id="pin-18">
+    <title>Pin 18 · GPIO24</title>
+    <circle cx="433" cy="446" r="12.5" fill="#ffffff"/>
+    <text x="433" y="450.5" class="pin">18</text>
+    <text x="483" y="451" class="signal ">GPIO24</text>
+  </g>
+  <g id="pin-19">
+    <title>Pin 19 · GPIO10 · SPI0 MOSI</title>
+    <circle cx="387" cy="479" r="12.5" fill="#ffffff"/>
+    <text x="387" y="483.5" class="pin">19</text>
+    <text x="337" y="484" class="signal " text-anchor="end">GPIO10</text>
+    <text x="36" y="484" class="use">SPI0 MOSI</text>
+  </g>
+  <g id="pin-20">
+    <title>Pin 20 · GND</title>
+    <circle cx="433" cy="479" r="12.5" fill="#d3dfe0"/>
+    <text x="433" y="483.5" class="pin">20</text>
+    <text x="483" y="484" class="signal ground">GND</text>
+  </g>
+  <path d="M28 512H349 M471 512H792" fill="none" stroke="#f1f5f4" stroke-width="31"/>
+  <g id="pin-21">
+    <title>Pin 21 · GPIO9 · SPI0 MISO</title>
+    <circle cx="387" cy="512" r="12.5" fill="#ffffff"/>
+    <text x="387" y="516.5" class="pin">21</text>
+    <text x="337" y="517" class="signal " text-anchor="end">GPIO9</text>
+    <text x="36" y="517" class="use">SPI0 MISO</text>
+  </g>
+  <g id="pin-22">
+    <title>Pin 22 · GPIO25</title>
+    <circle cx="433" cy="512" r="12.5" fill="#ffffff"/>
+    <text x="433" y="516.5" class="pin">22</text>
+    <text x="483" y="517" class="signal ">GPIO25</text>
+  </g>
+  <g id="pin-23">
+    <title>Pin 23 · GPIO11 · SPI0 SCLK</title>
+    <circle cx="387" cy="545" r="12.5" fill="#ffffff"/>
+    <text x="387" y="549.5" class="pin">23</text>
+    <text x="337" y="550" class="signal " text-anchor="end">GPIO11</text>
+    <text x="36" y="550" class="use">SPI0 SCLK</text>
+  </g>
+  <g id="pin-24">
+    <title>Pin 24 · GPIO8 · SPI0 CE0</title>
+    <circle cx="433" cy="545" r="12.5" fill="#ffffff"/>
+    <text x="433" y="549.5" class="pin">24</text>
+    <text x="483" y="550" class="signal ">GPIO8</text>
+    <text x="592" y="550" class="use">SPI0 CE0</text>
+  </g>
+  <path d="M28 578H349 M471 578H792" fill="none" stroke="#f1f5f4" stroke-width="31"/>
+  <g id="pin-25">
+    <title>Pin 25 · GND</title>
+    <circle cx="387" cy="578" r="12.5" fill="#d3dfe0"/>
+    <text x="387" y="582.5" class="pin">25</text>
+    <text x="337" y="583" class="signal ground" text-anchor="end">GND</text>
+  </g>
+  <g id="pin-26">
+    <title>Pin 26 · GPIO7 · SPI0 CE1</title>
+    <circle cx="433" cy="578" r="12.5" fill="#ffffff"/>
+    <text x="433" y="582.5" class="pin">26</text>
+    <text x="483" y="583" class="signal ">GPIO7</text>
+    <text x="592" y="583" class="use">SPI0 CE1</text>
+  </g>
+  <g id="pin-27">
+    <title>Pin 27 · GPIO0 · ID_SD · HAT EEPROM</title>
+    <circle cx="387" cy="611" r="12.5" fill="#ffffff"/>
+    <text x="387" y="615.5" class="pin">27</text>
+    <text x="337" y="616" class="signal reserved" text-anchor="end">GPIO0</text>
+    <text x="36" y="616" class="use">ID_SD · HAT EEPROM</text>
+  </g>
+  <g id="pin-28">
+    <title>Pin 28 · GPIO1 · ID_SC · HAT EEPROM</title>
+    <circle cx="433" cy="611" r="12.5" fill="#ffffff"/>
+    <text x="433" y="615.5" class="pin">28</text>
+    <text x="483" y="616" class="signal reserved">GPIO1</text>
+    <text x="592" y="616" class="use">ID_SC · HAT EEPROM</text>
+  </g>
+  <path d="M28 644H349 M471 644H792" fill="none" stroke="#f1f5f4" stroke-width="31"/>
+  <g id="pin-29">
+    <title>Pin 29 · GPIO5 · GPCLK1</title>
+    <circle cx="387" cy="644" r="12.5" fill="#ffffff"/>
+    <text x="387" y="648.5" class="pin">29</text>
+    <text x="337" y="649" class="signal " text-anchor="end">GPIO5</text>
+    <text x="36" y="649" class="use">GPCLK1</text>
+  </g>
+  <g id="pin-30">
+    <title>Pin 30 · GND</title>
+    <circle cx="433" cy="644" r="12.5" fill="#d3dfe0"/>
+    <text x="433" y="648.5" class="pin">30</text>
+    <text x="483" y="649" class="signal ground">GND</text>
+  </g>
+  <g id="pin-31">
+    <title>Pin 31 · GPIO6 · GPCLK2</title>
+    <circle cx="387" cy="677" r="12.5" fill="#ffffff"/>
+    <text x="387" y="681.5" class="pin">31</text>
+    <text x="337" y="682" class="signal " text-anchor="end">GPIO6</text>
+    <text x="36" y="682" class="use">GPCLK2</text>
+  </g>
+  <g id="pin-32">
+    <title>Pin 32 · GPIO12 · PWM0[0]</title>
+    <circle cx="433" cy="677" r="12.5" fill="#ffffff"/>
+    <text x="433" y="681.5" class="pin">32</text>
+    <text x="483" y="682" class="signal ">GPIO12</text>
+    <text x="592" y="682" class="use">PWM0[0]</text>
+  </g>
+  <path d="M28 710H349 M471 710H792" fill="none" stroke="#f1f5f4" stroke-width="31"/>
+  <g id="pin-33">
+    <title>Pin 33 · GPIO13 · PWM0[1]</title>
+    <circle cx="387" cy="710" r="12.5" fill="#ffffff"/>
+    <text x="387" y="714.5" class="pin">33</text>
+    <text x="337" y="715" class="signal " text-anchor="end">GPIO13</text>
+    <text x="36" y="715" class="use">PWM0[1]</text>
+  </g>
+  <g id="pin-34">
+    <title>Pin 34 · GND</title>
+    <circle cx="433" cy="710" r="12.5" fill="#d3dfe0"/>
+    <text x="433" y="714.5" class="pin">34</text>
+    <text x="483" y="715" class="signal ground">GND</text>
+  </g>
+  <g id="pin-35">
+    <title>Pin 35 · GPIO19 · I²S word select · PWM0[3]</title>
+    <circle cx="387" cy="743" r="12.5" fill="#ffffff"/>
+    <text x="387" y="747.5" class="pin">35</text>
+    <text x="337" y="748" class="signal " text-anchor="end">GPIO19</text>
+    <text x="36" y="748" class="use">I²S word select · PWM0[3]</text>
+  </g>
+  <g id="pin-36">
+    <title>Pin 36 · GPIO16</title>
+    <circle cx="433" cy="743" r="12.5" fill="#ffffff"/>
+    <text x="433" y="747.5" class="pin">36</text>
+    <text x="483" y="748" class="signal ">GPIO16</text>
+  </g>
+  <path d="M28 776H349 M471 776H792" fill="none" stroke="#f1f5f4" stroke-width="31"/>
+  <g id="pin-37">
+    <title>Pin 37 · GPIO26</title>
+    <circle cx="387" cy="776" r="12.5" fill="#ffffff"/>
+    <text x="387" y="780.5" class="pin">37</text>
+    <text x="337" y="781" class="signal " text-anchor="end">GPIO26</text>
+  </g>
+  <g id="pin-38">
+    <title>Pin 38 · GPIO20 · I²S data in</title>
+    <circle cx="433" cy="776" r="12.5" fill="#ffffff"/>
+    <text x="433" y="780.5" class="pin">38</text>
+    <text x="483" y="781" class="signal ">GPIO20</text>
+    <text x="592" y="781" class="use">I²S data in</text>
+  </g>
+  <g id="pin-39">
+    <title>Pin 39 · GND</title>
+    <circle cx="387" cy="809" r="12.5" fill="#d3dfe0"/>
+    <text x="387" y="813.5" class="pin">39</text>
+    <text x="337" y="814" class="signal ground" text-anchor="end">GND</text>
+  </g>
+  <g id="pin-40">
+    <title>Pin 40 · GPIO21 · I²S data out</title>
+    <circle cx="433" cy="809" r="12.5" fill="#ffffff"/>
+    <text x="433" y="813.5" class="pin">40</text>
+    <text x="483" y="814" class="signal ">GPIO21</text>
+    <text x="592" y="814" class="use">I²S data out</text>
+  </g>
+  <text x="28" y="853" class="body muted">Center numbers identify physical pins. GPIO labels use BCM numbering. Selected alternate functions shown.</text>
+  <path d="M28 872H792" stroke="#c9d4d3"/>
+  <text x="28" y="904" style="font-size:21px;font-weight:bold">Dry contacts for recording</text>
+  <text x="28" y="929" class="body muted">Both contacts are shown open. Each switch connects its input only to ground when closed.</text>
+  <g id="contact-a-wiring" transform="translate(28 944)">
+    <rect width="373" height="94" rx="7" fill="#e8f6f0"/>
+    <text x="14" y="23" class="body contact-a" font-weight="bold">Contact A</text>
+    <text x="15" y="79" class="use">GPIO17 · pin 11</text>
+    <text x="358" y="79" class="use" text-anchor="end">GND · pin 9</text>
+    <g stroke="#006554" class="wire">
+      <path d="M20 50H160 M163 49l42 -16 M214 50H352"/>
+      <circle cx="163" cy="50" r="3" fill="#e8f6f0"/>
+      <circle cx="211" cy="50" r="3" fill="#e8f6f0"/>
+      <circle cx="20" cy="50" r="3" fill="#006554"/>
+      <circle cx="352" cy="50" r="3" fill="#006554"/>
+    </g>
+  </g>
+  <g id="contact-b-wiring" transform="translate(419 944)">
+    <rect width="373" height="94" rx="7" fill="#f1ecf9"/>
+    <text x="14" y="23" class="body contact-b" font-weight="bold">Contact B · optional</text>
+    <text x="15" y="79" class="use">GPIO27 · pin 13</text>
+    <text x="358" y="79" class="use" text-anchor="end">GND · pin 14</text>
+    <g stroke="#6740a3" class="wire">
+      <path d="M20 50H160 M163 49l42 -16 M214 50H352"/>
+      <circle cx="163" cy="50" r="3" fill="#f1ecf9"/>
+      <circle cx="211" cy="50" r="3" fill="#f1ecf9"/>
+      <circle cx="20" cy="50" r="3" fill="#6740a3"/>
+      <circle cx="352" cy="50" r="3" fill="#6740a3"/>
+    </g>
+  </g>
+</svg>

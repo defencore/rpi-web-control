@@ -1,13 +1,13 @@
 # Recording triggers
 
-A trigger holds a recording claim while its input is active. Several rules can hold claims simultaneously. The last release ends a recording once the manual recording control is also off. Rule IDs are stable identifiers across edits. Applying unrelated settings preserves existing claims and timer schedules. Removing, disabling, or editing an active rule releases its claim before its replacement starts.
+A rule can request recording while a contact is open or hold its request until a separate stop event. Several rules and the manual recording control can share one clip. The clip closes when the last source releases it. Applying unrelated settings preserves existing claims and timer schedules. Removing, disabling, or editing an active rule releases its claim before its replacement starts.
 
 Each rule has a unique `id` of 1–48 ASCII letters, digits, hyphens or underscores, a `type`, and an optional boolean `enabled` (default `true`). Up to 32 rules are supported. Unknown fields, invalid types and duplicate enabled GPIO or UART inputs are rejected before the active configuration changes.
 
 | Type | Required fields | Optional fields and defaults |
 | --- | --- | --- |
 | `timer` | None | `interval_s: 60`, `duration_s: 5` |
-| `gpio` | `pin` | `contact: "NO"`, `debounce_ms: 30` |
+| `gpio` | `pin` | `contact: "NO"`, `debounce_ms: 30`, optional `stop` input and `stop_on_return` switch |
 | `sensor` | `path`, `threshold` | `comparison: "above"`, `hysteresis: 0`, `poll_ms: 250` |
 | `uart` | None | `device: "/dev/serial0"`, `baud: 115200`, `start_command: "START"`, `stop_command: "STOP"` |
 
@@ -19,16 +19,80 @@ The first window opens one interval after enabling the rule. This example record
 
 ## GPIO
 
-`{"id":"door","type":"gpio","pin":17,"contact":"NC","debounce_ms":30}`
+### 40-pin header and contact wiring
 
-Connect a voltage-free contact between the selected GPIO and ground. The service requests the RP1 line as an input with internal pull-up and watches both edges. Select the BCM GPIO number (0–27) exposed by the board or CM5 carrier. The driver discovers the chip by its kernel label, `pinctrl-rp1`. The service account needs access to the GPIO device.
+![Top view of the Raspberry Pi 40-pin header. The examples use physical pin 11 (GPIO17) with ground pin 9, and physical pin 13 (GPIO27) with ground pin 14.](assets/gpio-header-40pin.svg)
 
-| Contact | Normal state | Recording claim |
+Use the physical pin numbers to wire the connector and the BCM numbers in **Triggers**. For example, entering `17` selects GPIO17 on physical pin **11**. Physical pin **17** supplies 3.3 V. Locate the pin 1 mark on the board before counting. This pinout applies to the Raspberry Pi 5 header and J8 on the official CM5 IO Board. Check the connector drawing for your own CM5 carrier. [Raspberry Pi header pinout](https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#gpio-and-the-40-pin-header) · [CM5 IO Board datasheet, figure 5](https://pip-assets.raspberrypi.com/categories/1097-raspberry-pi-compute-module-5-io-board/documents/RP-008182-DS-3-cm5io-datasheet.pdf)
+
+With the Pi powered off, wire a **voltage-free contact** between the chosen GPIO and GND. On a relay, use the **COM** and **NC** terminals for the examples below. Leave the 3.3 V and 5 V supply pins out of the contact circuit. The controller enables the GPIO’s internal pull-up. Opening the contact reads high and closing it to ground reads low. [GPIO input levels and pull-ups](https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#inputs)
+
+| Contact | Physical wiring | Value in the web form |
 | --- | --- | --- |
-| NO | Open, input high | Closed, input low |
-| NC | Closed, input low | Open, input high |
+| Start, or start/stop on one contact | Pin **11** → contact A → pin **9** (GND) | `17` |
+| Optional separate stop | Pin **13** → contact B → pin **14** (GND) | `27` |
 
-The initial position is evaluated when the rule starts. A change must stay stable for `debounce_ms` (0–1000 ms) to qualify. A value of zero disables the filter. Short pulses can be lost if the kernel event buffer overflows during sustained load. Rule detection and camera startup have latency. A trigger starts capture on demand and has no pre-record buffer.
+### Record while one contact is open
+
+1. Wire contact A and close it. In **Triggers → Add rule**, enter `door` for **Rule ID** and choose **GPIO contact**.
+2. Set **BCM GPIO pin** to `17`, **Contact type** to **Normally closed** and **Debounce time (ms)** to `30`. Under **Stop recording when**, leave **Start contact returns to normal** selected. Check **Enable this rule** and choose **Save rule**.
+3. Open A and check that the rule shows **active**. Close A and it returns to **ready**. With manual recording off and no other active rules, the completed clip appears in **Recordings**.
+
+```json
+{"id":"door","type":"gpio","pin":17,"contact":"NC","debounce_ms":30}
+```
+
+This mode evaluates the initial contact position. If A is already open when the service starts or the rule is enabled, recording starts after debounce. A broken wire on an NC circuit also appears open.
+
+| Contact type | Contact at rest | Condition that activates the input |
+| --- | --- | --- |
+| Normally open (`NO`) | Open, input high | Close the contact to GND |
+| Normally closed (`NC`) | Closed, input low | Open the contact |
+
+### Start on one contact and stop on another
+
+The separate GPIO and UART stop options are available from version `0.9.0-1`. [Package installation](package.md)
+
+Wire A and B as shown above. Start with both closed. Edit the same GPIO rule, keeping the start input on GPIO17. Choose **Stop recording when → Second GPIO contact activates**, set **Stop BCM GPIO pin** to `27`, **Stop contact type** to **Normally closed** and **Stop debounce time (ms)** to `30`. Choose **Save rule** and wait for **ready**.
+
+| Action | Expected result when this rule is the only recording source |
+| --- | --- |
+| Open A | Recording starts. |
+| Close A | Recording continues. |
+| Open B | Recording stops. Keeping B open inhibits another start. |
+| Close B, then open A again from its closed position | A new clip starts. |
+
+```json
+{
+  "id": "door", "type": "gpio", "pin": 17, "contact": "NC", "debounce_ms": 30,
+  "stop": {"type": "gpio", "pin": 27, "contact": "NC", "debounce_ms": 30}
+}
+```
+
+### Start on a contact and stop with a serial command
+
+Use contact A alone. Edit the rule and choose **Stop recording when → UART command arrives**. Set **Stop UART device** to the receiver on the Pi (for example `/dev/ttyUSB0`), **Stop baud rate** to `115200` and **Stop command** to `STOP`. Save the rule and wait for **ready**.
+
+Open A to start. On the **sending device**, use a serial terminal at **115200, 8N1**, type `STOP` and send LF or CRLF. The bytes for `STOP` followed by LF are `53 54 4F 50 0A` in hex. The command is case-sensitive. It releases this rule even while A is still open. Close and reopen A for the next clip. [UART port and command settings](#uart)
+
+```json
+{
+  "id": "door", "type": "gpio", "pin": 17, "contact": "NC", "debounce_ms": 30,
+  "stop": {"type": "uart", "device": "/dev/ttyUSB0", "baud": 115200, "command": "STOP"}
+}
+```
+
+The three examples are alternatives for **one** rule. With a separate stop input, the service waits for a fresh start transition after both inputs are ready. If A was already open at startup or after an input failure, close and reopen it. A stop from B or UART releases only that rule’s claim. Check the other active rules and the manual recording control if the camera keeps recording.
+
+### Stop on the first of two events
+
+When using a second GPIO or a UART stop command, check **Also stop when the start contact returns to normal** to keep contact A as a stop as well. With the two NC contacts above, opening A starts the clip. **Closing A** or **opening B** ends this rule’s recording request, whichever happens first. With a UART stop, either **closing A** or **receiving the stop line** ends the request. If the external event stops the recording while A is open, close and reopen A for the next clip.
+
+In the JSON configuration, set `"stop_on_return": true` alongside the `stop` object. Leaving the checkbox clear keeps recording after A closes and waits for the configured external stop.
+
+### Input timing and troubleshooting
+
+Choose an available BCM line from 0–27 routed to the header on your board. A contact must remain stable for its debounce time (0–1000 ms). Zero disables the filter. The service discovers the RP1 controller by its kernel label `pinctrl-rp1` and needs access to the GPIO chip. If a rule shows **error**, inspect the message beside its ID and check whether the selected line or serial port is already in use. Capture starts on demand. Allow for debounce and camera startup latency. Short pulses can be lost if the kernel event buffer overflows.
 
 ## Numeric sensor
 
@@ -44,12 +108,13 @@ Choose the UART exposed by the carrier and configured in the OS. Serial aliases 
 
 ## Runtime status
 
-Each configured rule reports its ID, type, enabled setting, `active` claim, `state`, and last `error`. The state is `disabled`, `starting`, `ready`, or `error`. On an input failure the worker releases its claim and retries after two seconds. A reconnected UART needs a fresh start line. GPIO and sensor rules evaluate the current level again. Other workers continue independently.
+Each configured rule reports its ID, type, enabled setting, `active` claim, `state`, and last `error`. The state is `disabled`, `starting`, `ready`, or `error`. On an input failure the worker releases its claim and retries after two seconds. A reconnected UART rule needs a fresh start line. A GPIO rule with a separate stop needs a fresh start transition. Single-contact GPIO and sensor rules evaluate the current level again. Other workers continue independently.
 
 To add an input, extend validation in `rpi_web_control/triggers.py`, register an adapter in `rpi_web_control/trigger_inputs.py`, and update the rule editor and its tests. Adapters own their device for the lifetime of one worker, call `ready()` once operational, call `publish(bool)` on level changes and check the stop event between bounded I/O waits.
 
 ## References
 
+- [RP1 datasheet, GPIO alternate functions](https://datasheets.raspberrypi.com/rp1/rp1-peripherals.pdf)
 - [Raspberry Pi GPIO usage and chip discovery](https://pip.raspberrypi.com/categories/685-app-notes-guides-whitepapers/documents/RP-006553-WP/A-history-of-GPIO-usage-on-Raspberry-Pi-devices-and-current-best-practices.pdf)
 - [libgpiod line requests](https://libgpiod.readthedocs.io/en/v2.3.2/python_line_request.html)
 - [pySerial API](https://pyserial.readthedocs.io/en/stable/pyserial_api.html)

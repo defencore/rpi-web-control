@@ -15,6 +15,9 @@ BRIDGE_REQUEST = {"action": "apply", "mode": "bridge", "interface": "eth0", "wif
                   "ssid": "CameraLab", "password": "sample-network-pass"}
 WIRED_REQUEST = {k: v for k, v in BRIDGE_REQUEST.items() if k not in ("wifi_interface", "ssid", "password")}
 WIRED_REQUEST["mode"] = "ethernet"
+STATION_REQUEST = {"action": "apply", "mode": "station", "interface": "wlan0", "security": "wpa2-personal",
+                   "ssid": "Office", "password": "test passphrase", "ipv4_method": "auto",
+                   "address": "", "gateway": "", "dns": []}
 
 
 class DBusTypes:
@@ -178,6 +181,74 @@ class TransactionTests(unittest.TestCase):
         self.previous.Delete.assert_not_called()
         self.admin.Delete.assert_not_called()
 
+    def test_station_checkpoint_and_persistence_are_limited_to_the_wifi_device(self):
+        wired = self.profile("wired-static", "eth0", ETHERNET)
+        wired.GetSettings.return_value["ipv4"] = {"method": "manual",
+                                                  "address-data": [{"address": "192.168.55.100", "prefix": 24}]}
+        original_settings = copy.deepcopy(wired.GetSettings.return_value)
+        self.devices[0].update(active_uuid="wired-static", addresses=["192.168.55.100/24"])
+        original_eth = copy.deepcopy(self.devices[0])
+        self.previous.GetSettings.return_value[WIFI] = {"mode": "ap"}
+        for action in ("rollback", "confirm"):
+            trial = self.engine.stage(STATION_REQUEST)
+            self.nm.manager.CheckpointCreate.assert_called_with(["/wlan0"], 95, 0)
+            self.assertEqual(self.nm.manager.AddAndActivateConnection2.call_args.args[1], "/wlan0")
+            if action == "confirm":
+                self.engine.confirm(trial["id"])
+                self.previous.Delete.assert_called_once()
+                self.assertEqual(self.saved_names, ["wlan0"])
+            else:
+                self.engine.cancel(trial["id"])
+                self.previous.Delete.assert_not_called()
+            self.nm.manager.DeactivateConnection.assert_not_called()
+            self.assertEqual(self.devices[0], original_eth)
+            self.assertEqual(wired.GetSettings.return_value, original_settings)
+            for profile in (wired, self.admin):
+                profile.Delete.assert_not_called()
+                profile.Update2.assert_not_called()
+
+    def test_station_join_rejects_active_or_saved_bridge_port_before_checkpoint(self):
+        self.devices[1]["controller"] = BRIDGE
+        with self.assertRaisesRegex(ValueError, "bridge port"):
+            self.engine.stage(STATION_REQUEST)
+        self.devices[1]["controller"] = ""
+        self.profile("bridge-uuid", BRIDGE, "bridge")
+        self.profile("wifi-port", "wlan0", WIFI, master="bridge-uuid")
+        with self.assertRaisesRegex(ValueError, "bridge port"):
+            self.engine.stage(STATION_REQUEST)
+        self.nm.manager.CheckpointCreate.assert_not_called()
+        self.nm.manager.DeactivateConnection.assert_not_called()
+
+        # A second radio can join while the original radio and Ethernet stay on their bridge.
+        self.devices.append(self.row("wlan1", "wifi"))
+        trial = self.engine.stage(dict(STATION_REQUEST, interface="wlan1"))
+        self.nm.manager.CheckpointCreate.assert_called_once_with(["/wlan1"], 95, 0)
+        self.engine.confirm(trial["id"])
+        self.assertEqual(self.saved_names, ["wlan1"])
+        self.profiles["bridge-uuid"].Delete.assert_not_called()
+        self.profiles["wifi-port"].Delete.assert_not_called()
+        self.nm.manager.DeactivateConnection.assert_not_called()
+
+    def test_station_activation_failure_rolls_back_only_radio_and_preserves_settings(self):
+        wired = self.profile("fixed-address", "eth0", ETHERNET)
+
+        def failed_auth(*args):
+            uid, active, options = self.activate(*args)
+            self.active[active]["State"] = 4  # NetworkManager deactivated the candidate.
+            return uid, active, options
+
+        self.nm.manager.AddAndActivateConnection2.side_effect = failed_auth
+        with self.assertRaisesRegex(RuntimeError, "security, password") as caught:
+            self.engine.stage(STATION_REQUEST)
+        self.assertNotIn(STATION_REQUEST["password"], str(caught.exception))
+        self.assertEqual(self.affected, ["/wlan0"])
+        self.nm.manager.CheckpointRollback.assert_called_once_with("/checkpoint")
+        self.assertIsNone(self.engine.status())
+        self.assertEqual(self.saved_names, [])
+        for profile in (wired, self.previous):
+            profile.Delete.assert_not_called()
+            profile.Update2.assert_not_called()
+
     def test_recovery_address_alone_cannot_confirm_a_dhcp_trial(self):
         trial = self.engine.stage(dict(WIRED_REQUEST, ipv4_method="auto", address=""))
         next(iter(self.active.values()))["Dhcp4Config"] = "/"
@@ -218,6 +289,14 @@ class TransactionTests(unittest.TestCase):
         with self.assertRaises(tx.NetworkConflict):
             self.engine.enable_wifi()
         self.assertEqual(props.Set.call_count, 1)
+
+    def test_scan_request_respects_network_trials(self):
+        with patch.object(tx, "request_wifi_scan") as request:
+            self.assertIs(self.engine.request_scan("wlan0"), request.return_value)
+            self.engine.stage(WIRED_REQUEST)
+            with self.assertRaises(tx.NetworkConflict):
+                self.engine.request_scan("wlan0", allow_ap_scan=True)
+            request.assert_called_once_with(self.nm, "wlan0", allow_ap_scan=False)
 
     def test_partial_commit_is_reversed_under_the_same_checkpoint(self):
         trial = self.engine.stage(BRIDGE_REQUEST)

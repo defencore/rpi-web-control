@@ -297,6 +297,7 @@ summary { color: var(--green); font-weight: 600; cursor: pointer; font-size: .88
 .network-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 #network-timer { margin-top: 5px; font-variant-numeric: tabular-nums; }
 #network-fields { min-width: 0; margin: 0; border: 0; }
+.station-fields { display: grid; gap: 14px; min-width: 0; margin: 0; border: 0; padding: 0; }
 .network-guidance { border-left: 3px solid var(--edge); padding-left: 12px; overflow-wrap: anywhere; }
 .network-guidance h3 { margin-bottom: 3px; }
 .network-guidance a { display: inline-block; margin-top: 6px; }

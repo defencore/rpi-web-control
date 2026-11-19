@@ -89,7 +89,7 @@ if [ "$diagnostics" = yes ]; then
 
     printf '\nFilesystem space\n'
     set -- /
-    for dir in /var/lib/rpi-web-control /boot/firmware /srv/rpi-web-control-nvme; do
+    for dir in /var/lib/rpi-web-control /boot/firmware /srv/rpi-web-control-nvme /srv/rpi-web-control-usb; do
         if [ -d "$dir" ]; then set -- "$@" "$dir"; fi
     done
     inspect df -hP "$@"
@@ -103,6 +103,34 @@ if [ "$diagnostics" = yes ]; then
     inspect nmcli -f GENERAL.DEVICE,GENERAL.STATE,GENERAL.REASON,WIFI-PROPERTIES.AP device show
     inspect raspi-config nonint get_wifi_country
     inspect dpkg-query -W network-manager python3-dbus dnsmasq-base
+
+    printf '\nWi-Fi scan state (read-only NetworkManager cache)\n'
+    inspect python3 - <<'PY'
+import time
+import dbus
+
+service = "org.freedesktop.NetworkManager"
+bus = dbus.SystemBus()
+manager = dbus.Interface(bus.get_object(service, "/org/freedesktop/NetworkManager"), service)
+radios = 0
+for path in manager.GetDevices():
+    properties = dbus.Interface(bus.get_object(service, path), "org.freedesktop.DBus.Properties")
+    device = service + ".Device"
+    if properties.Get(device, "DeviceType") != 2:
+        continue
+    radios += 1
+    name = properties.Get(device, "Interface")
+    try:
+        wifi = properties.GetAll(device + ".Wireless")
+        mode = {0: "unknown", 1: "ad-hoc", 2: "station", 3: "AP", 4: "mesh"}.get(wifi["Mode"], "other")
+        last_scan_ms = int(wifi["LastScan"])
+        age = "never" if last_scan_ms < 0 else f"{time.clock_gettime(time.CLOCK_BOOTTIME) - last_scan_ms / 1000:.0f} s ago"
+        print(f"{name}: mode={mode}, last scan={age}, cached access points={len(wifi['AccessPoints'])}")
+    except (dbus.DBusException, KeyError) as exc:
+        print(f"{name}: scan state unavailable ({exc})")
+if not radios:
+    print("NetworkManager reports no Wi-Fi radios.")
+PY
 
     printf '\nWired recovery service and timer\n'
     if [ -r /run/rpi-web-control-recovery/status.json ]; then

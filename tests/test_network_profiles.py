@@ -74,6 +74,25 @@ class NetworkProfileTests(unittest.TestCase):
             self.assertEqual(p["user"]["data"][OWNER], "1")
             self.assertTrue(p["connection"]["autoconnect"])
 
+    def test_station_security_profiles_and_explicit_hidden_ssid(self):
+        request = {**WIRED, **WLAN}
+        for security, password, key_mgmt in (("open", "", None),
+                                             ("wpa3-personal", "key\N{KEY}", "sae"),
+                                             ("wpa2-personal", WLAN["password"], "wpa-psk")):
+            with self.subTest(security=security):
+                profile, = build_profiles(dict(request, security=security, password=password, hidden=True), DBus)
+                self.assertEqual(profile[WIFI], {"ssid": b"Field station", "mode": "infrastructure", "hidden": True})
+                if key_mgmt is None:
+                    self.assertNotIn(WIFI + "-security", profile)
+                else:
+                    self.assertEqual(profile[WIFI + "-security"], {"key-mgmt": key_mgmt, "psk": password, "proto": ["rsn"]})
+        self.assertNotIn("hidden", build_profiles(request, DBus)[0][WIFI])
+        for changes in ({"security": "enterprise"}, {"security": "open"}, {"security": "wpa3-personal", "password": ""},
+                        {"password": ""}, {"mode": "ap", "security": "open", "ipv4_method": "shared", "password": ""},
+                        {"hidden": 1}, {"mode": "ap", "ipv4_method": "shared", "hidden": True}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                validate_apply(dict(request, **changes))
+
     def test_rejects_invalid_fields_secrets_and_ipv4_combinations(self):
         manual = {**WIRED, "ipv4_method": "manual", "address": "10.0.0.8/24"}
         ap = {**WIRED, **WLAN, "mode": "ap", "ipv4_method": "shared"}
@@ -82,7 +101,8 @@ class NetworkProfileTests(unittest.TestCase):
         for bad in ({**WIRED, "password": "spurious"}, {**WIRED, "address": "192.0.2.10/24"},
                     {**BRIDGED, "wifi_interface": "eth0"}, {**BRIDGED, "mode": "station"},
                     {**ap, "ipv4_method": "auto"}, {**ap, "password": 12345678},
-                    {**WLAN, "ssid": "é" * 17}, {**ap, "gateway": "1.2.3.4"}, {**ap, "dns": ["1.1.1.1"]},
+                    {**WLAN, "ssid": "\N{LATIN SMALL LETTER E WITH ACUTE}" * 17},
+                    {**ap, "gateway": "1.2.3.4"}, {**ap, "dns": ["1.1.1.1"]},
                     {**WIRED, "ipv4_method": "shared"}, {**WIRED, "dns": [2130706433]},
                     {**manual, "address": "10.0.0.0/24"}, {**manual, "address": "10.0.0.255/24"},
                     {**manual, "address": "::1/64"}, {**manual, "address": "224.0.0.10/24"},
@@ -166,7 +186,16 @@ class NetworkProfileTests(unittest.TestCase):
             with self.subTest(ip=ip):
                 profile.GetSettings.return_value = {"ipv4": ip}
                 self.assertEqual(inventory(mgr)[0]["configured_primary"], expected)
+        data["/w", types + ".Wireless"]["Mode"] = 2
+        for sec, expected in ((None, "open"), ({"key-mgmt": "sae"}, "wpa3-personal"),
+                              ({"key-mgmt": "wpa-psk"}, "wpa2-personal"), ({"key-mgmt": "wpa-eap"}, "unsupported")):
+            profile.GetSettings.return_value = {WIFI: {"hidden": True}}
+            if sec is not None:
+                profile.GetSettings.return_value[WIFI + "-security"] = sec
+            wifi = inventory(mgr)[0]
+            self.assertEqual((wifi["mode"], wifi["security"], wifi["hidden"]), ("station", expected, True))
         profile.GetSettings.side_effect = DBus.DBusException("Private connection")
         wifi, bridge, _ = inventory(mgr)
+        self.assertNotIn("security", wifi)
         self.assertEqual((wifi["active_uuid"], wifi["ipv4_method"], wifi["dns_override"]), ("wifi-uuid", "", []))
         self.assertEqual((bridge["addresses"], bridge["dns"]), (["192.0.2.1/24"], ["8.8.8.8"]))

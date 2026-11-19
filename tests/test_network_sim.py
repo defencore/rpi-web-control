@@ -20,6 +20,7 @@ ETHERNET = {"action": "apply", "mode": "ethernet", "interface": "eth0", "ipv4_me
             "address": "192.0.2.90/24", "gateway": "192.0.2.1", "dns": ["192.0.2.53"]}
 WIFI = {"action": "apply", "mode": "station", "interface": "wlan0", "ssid": "Workshop",
         "password": "fixture-wpa-passphrase", "ipv4_method": "auto", "address": "", "gateway": "", "dns": []}
+SCAN = {"action": "scan_wifi", "interface": "wlan0"}
 BRIDGE = {**ETHERNET, "mode": "bridge", "wifi_interface": "wlan0", "ssid": WIFI["ssid"],
           "password": WIFI["password"], "ipv4_method": "shared", "address": "192.0.2.91/24",
           "gateway": "", "dns": []}
@@ -71,6 +72,7 @@ class SimulatedNetworkTests(unittest.TestCase):
             with connection.getresponse() as response:
                 body = response.read().decode()
                 self.assertNotIn(WIFI["password"], body)
+                self.assertNotIn("camera-fixture-key", body)
                 self.assertEqual(response.status, expected, body)
                 reply = json.loads(body)
                 return reply["network"] if data is None and expected == 200 else reply
@@ -113,6 +115,89 @@ class SimulatedNetworkTests(unittest.TestCase):
         restored = self.request({"action": "rollback", "id": stage["pending"]["id"]})
         self.assertEqual(by_name(restored), by_name(saved))
         self.assertNotIn(WIFI["password"], (self.state / "network-sim.json").read_text())
+
+    def test_scan_join_confirm_and_rollback_preserve_static_ethernet(self):
+        fixed = {**ETHERNET, "address": str(RESCUE), "gateway": "192.168.55.1"}
+        trial = self.request(fixed)["pending"]["id"]
+        original = self.request({"action": "confirm", "id": trial})
+        wired = by_name(original)["eth0"]
+        self.assertEqual((wired["addresses"], wired["ipv4_method"]), ([str(RESCUE)], "manual"))
+        self.request(SCAN, expected=401, authenticated=False)
+        self.request(SCAN, expected=403, origin="http://external")
+        with patch("rpi_web_control.network_sim.monotonic", return_value=100) as clock:
+            scan = self.request(SCAN)
+            self.assertEqual(scan["interface"], "wlan0")
+            self.assertFalse(scan["cached"])
+            self.assertTrue(self.request(SCAN)["cached"])
+            clock.return_value = 120
+            self.assertFalse(self.request(SCAN)["cached"])
+        self.assertEqual(self.request(), original)
+        rows = {row["ssid"]: row for row in scan["networks"]}
+        self.assertFalse(rows["Capture Office"]["supported"])
+        self.request({**WIFI, "ssid": "Capture Office", "security": rows["Capture Office"]["security"]}, expected=400)
+        protected = rows["Capture Lab"]
+        secured = {**WIFI, "ssid": protected["ssid"], "security": protected["security"],
+                   "password": "camera-fixture-key"}
+        self.request({**secured, "password": "incorrect-key"}, expected=503)
+        self.assertEqual(self.request(), original)
+        staged = self.request(secured)
+        self.assertEqual(staged["recovery"], original["recovery"])
+        self.assertEqual(by_name(staged)["eth0"], wired)
+        self.assertEqual(by_name(staged)["wlan0"]["mode"], "station")
+        self.assertEqual(by_name(staged)["wlan0"]["addresses"], ["198.51.100.10/24"])
+        self.request(SCAN, expected=409)
+        joined = self.request({"action": "confirm", "id": staged["pending"]["id"]})
+        self.assertEqual(by_name(joined)["eth0"], wired)
+        self.assertNotIn(secured["password"], (self.state / "network-sim.json").read_text())
+        self.stop()
+        self.start()
+        self.assertEqual(self.request(), joined)
+        guest = rows["Capture Guest"]
+        open_network = {**WIFI, "ssid": guest["ssid"], "security": guest["security"], "password": ""}
+        candidate = self.request(open_network)
+        self.assertEqual(by_name(candidate)["wlan0"]["ssid"], guest["ssid"])
+        self.assertEqual(by_name(candidate)["eth0"], wired)
+        self.assertEqual(self.request({"action": "rollback", "id": candidate["pending"]["id"]}), joined)
+        candidate = self.request(open_network)
+        confirmed = self.request({"action": "confirm", "id": candidate["pending"]["id"]})
+        self.assertEqual(by_name(confirmed)["eth0"], wired)
+        radio = by_name(confirmed)["wlan0"]
+        self.assertEqual((radio["ssid"], radio["security"], radio["hidden"]), (guest["ssid"], "open", False))
+
+    def test_scan_refuses_unavailable_radio_and_preserves_bridge(self):
+        for params in ({"wifi": False}, {"wifi_enabled": False}, {"wifi_hardware_enabled": False}):
+            with self.subTest(params=params):
+                self.app.network = SimulatedNetwork(self.state, **params)
+                self.app.network_until = 0
+                initial = self.request()
+                self.request(SCAN, expected=400)
+                self.assertEqual(self.request(), initial)
+        self.app.network = SimulatedNetwork(self.state)
+        staged = self.request(BRIDGE)
+        bridge = self.request({"action": "confirm", "id": staged["pending"]["id"]})
+        self.request(WIFI, expected=400)
+        self.request(SCAN, expected=400)
+        self.request({**SCAN, "allow_ap_scan": True}, expected=400)
+        self.assertEqual(self.request(), bridge)
+
+    def test_explicit_scan_preserves_running_access_point_dhcp_and_wired_address(self):
+        fixed = {**ETHERNET, "address": str(RESCUE), "gateway": ""}
+        trial = self.request(fixed)["pending"]["id"]
+        self.request({"action": "confirm", "id": trial})
+        hotspot = {**WIFI, "mode": "ap", "ipv4_method": "shared", "address": "10.42.0.1/24"}
+        trial = self.request(hotspot)["pending"]["id"]
+        opt_in = {**SCAN, "allow_ap_scan": True}
+        self.request(opt_in, expected=409)
+        original = self.request({"action": "confirm", "id": trial})
+        self.assertEqual(by_name(original)["eth0"]["addresses"], [str(RESCUE)])
+        self.assertEqual(by_name(original)["wlan0"]["ipv4_method"], "shared")
+        self.request(SCAN, expected=400)
+        scan = self.request(opt_in)
+        self.assertGreater(scan["access_points_seen"], 0)
+        self.assertTrue(scan["networks"])
+        with patch("rpi_web_control.network_sim.SIMULATED_NETWORKS", ()):
+            self.request(opt_in, expected=503)
+        self.assertEqual(self.request(), original)
 
     def test_enable_software_blocked_radio_then_confirm_offline_hotspot(self):
         self.app.network = SimulatedNetwork(self.state, dhcp=False, wifi_enabled=False)
@@ -160,11 +245,14 @@ class SimulatedNetworkTests(unittest.TestCase):
         saved = json.loads(path.read_text())
         for row in saved.values():
             del row["dns_override"]
+            row.pop("security", None)
+            row.pop("hidden", None)
         path.write_text(json.dumps(saved))
         self.start()
         rows = by_name(self.request())
         self.assertEqual(rows["eth0"]["dns_override"], [])
         self.assertEqual(rows["wlan0"]["dns_override"], dns)
+        self.assertEqual((rows["wlan0"]["security"], rows["wlan0"]["hidden"]), ("wpa2-personal", False))
         cleared = by_name(self.request(WIFI))["wlan0"]
         self.assertEqual((cleared["dns_override"], cleared["dns"]), ([], [cleared["gateway"]]))
 

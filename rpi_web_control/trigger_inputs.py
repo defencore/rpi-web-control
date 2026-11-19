@@ -4,6 +4,7 @@ from contextlib import ExitStack, contextmanager
 import math
 from pathlib import Path
 import select
+import threading
 import time
 
 
@@ -44,29 +45,36 @@ def sensor(rule, stop, ready, publish):
         stop.wait(rule["poll_ms"] / 1000)
 
 
-def uart(rule, stop, ready, publish):
+def _uart_lines(rule, stopping, ready, on_line):
     import serial
 
-    start, end = (rule[key].encode("ascii") for key in ("start_command", "stop_command"))
     pending = bytearray()
     overflow = False
     with serial.Serial(rule["device"], rule["baud"], timeout=0.25, exclusive=True) as port:
         ready()
-        while not stop.is_set():
+        while not stopping():
             for byte in port.read(min(1024, port.in_waiting or 1)):
                 if byte == 10:
                     if not overflow:
-                        line = pending.removesuffix(b"\r")
-                        if line == start:
-                            publish(True)
-                        elif line == end:
-                            publish(False)
+                        on_line(pending.removesuffix(b"\r"))
                     pending.clear()
                     overflow = False
                 elif len(pending) < 65:
                     pending.append(byte)
                 else:
                     overflow = True
+
+
+def uart(rule, stop, ready, publish):
+    start, end = (rule[key].encode("ascii") for key in ("start_command", "stop_command"))
+
+    def on_line(line):
+        if line == start:
+            publish(True)
+        elif line == end:
+            publish(False)
+
+    _uart_lines(rule, stop.is_set, ready, on_line)
 
 
 @contextmanager
@@ -123,14 +131,14 @@ def _gpio_edges(pin):
         yield high, read
 
 
-def gpio(rule, stop, ready, publish):
+def _gpio_levels(rule, stopping, ready, publish):
     debounce = rule["debounce_ms"] * 1_000_000
     active_high = rule["contact"] == "NC"
     with _gpio_edges(rule["pin"]) as (high, read):
         ready()
         # Qualify the initial contact state and subsequent edges on the same monotonic clock.
         deadline = time.monotonic_ns() + debounce
-        while not stop.is_set():
+        while not stopping():
             timeout = 0.25 if deadline is None else min(0.25, max(0, deadline - time.monotonic_ns()) / 1e9)
             events = read(timeout)
             for timestamp, level in events:
@@ -143,6 +151,72 @@ def gpio(rule, stop, ready, publish):
             if not events and deadline is not None and time.monotonic_ns() >= deadline:
                 publish(high == active_high)
                 deadline = None
+
+
+def gpio(rule, stop, ready, publish):
+    if "stop" not in rule:
+        _gpio_levels(rule, stop.is_set, ready, publish)
+        return
+
+    # The two independent inputs share one rule ID and one recording claim.
+    # Serialize their updates and quiesce both readers on any I/O failure.
+    stop_rule = rule["stop"]
+    finished = threading.Event()
+    lock = threading.Lock()
+    start_active = stop_active = None
+    stop_error = None
+
+    def stopping():
+        return finished.is_set() or stop.is_set()
+
+    def start_contact(active):
+        nonlocal start_active
+        with lock:
+            previous, start_active = start_active, active
+            if previous is None and stop_active is not None:
+                ready()
+            if previous is False and active and stop_active is False and not stopping():
+                publish(True)
+            elif previous is True and not active and rule.get("stop_on_return", False):
+                publish(False)
+
+    def stop_contact(active):
+        nonlocal stop_active
+        with lock:
+            previous, stop_active = stop_active, active
+            if previous is None and start_active is not None:
+                ready()
+            if active:
+                publish(False)
+
+    def read_stop():
+        nonlocal stop_error
+        try:
+            if stop_rule["type"] == "gpio":
+                _gpio_levels(stop_rule, stopping, lambda: None, stop_contact)
+            else:
+                command = stop_rule["command"].encode("ascii")
+
+                def on_line(line):
+                    if line == command:
+                        with lock:
+                            publish(False)
+
+                _uart_lines(stop_rule, stopping, lambda: stop_contact(False), on_line)
+        except Exception as exc:
+            stop_error = exc
+        finally:
+            finished.set()
+
+    thread = threading.Thread(target=read_stop, name=f"trigger-stop-{rule['id']}", daemon=True)
+    thread.start()
+    try:
+        _gpio_levels(rule, stopping, lambda: None, start_contact)
+    finally:
+        finished.set()
+        thread.join()
+    if stop_error is not None:
+        raise stop_error
 
 
 INPUTS = {"timer": timer, "sensor": sensor, "uart": uart, "gpio": gpio}

@@ -133,7 +133,13 @@ def indexed_frames(video, video_size, index, manifest):
 
 class Overlay:
     def __init__(self, width, height, lines, font_path):
-        from PIL import Image, ImageDraw, ImageFont
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+        except ModuleNotFoundError as exc:
+            if exc.name != "PIL":
+                raise
+            raise RuntimeError("Pillow is missing. In the Python environment used for export, "
+                               "run `python3 -m pip install Pillow` and retry.") from exc
 
         try:
             self.font = ImageFont.truetype(str(font_path or "DejaVuSans.ttf"), max(11, height // 38))
@@ -142,8 +148,10 @@ class Overlay:
                 raise
             self.font = ImageFont.load_default()
         bounds = self.font.getbbox("Ag|0123456789")
-        self.line_height = max(bounds[3], bounds[3] - bounds[1]) + 3
-        panel_height = (lines * self.line_height + 5) // 2 * 2
+        text_height = max(bounds[3], bounds[3] - bounds[1])
+        self.line_height = text_height + 3
+        panel_height = 1 + (lines - 1) * self.line_height + text_height + 1
+        panel_height += panel_height % 2  # YUV420 chroma rows cover two luma rows.
         if panel_height > height:
             raise ValueError("Too many OSD lines for the recorded height. Select fewer fields.")
         self.width, self.height = width, height

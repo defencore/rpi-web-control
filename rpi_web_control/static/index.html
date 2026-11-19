@@ -252,8 +252,13 @@ gst-launch-1.0 videotestsrc num-buffers=90 ! videoconvert ! autovideosink</code>
         <details class="panel storage-details" id="mp4-help">
           <summary>Convert to MP4</summary>
           <div class="form-body">
-            <p class="field-help">Save the converter and the recording ZIP in the same folder on your computer. The converter requires Python 3, Pillow and FFmpeg.</p>
+            <p class="field-help">Save the converter and the recording ZIP in the same folder on your computer. You need Python 3.11 or newer and FFmpeg with ffprobe.</p>
             <div><a class="text-link" href="/api/tools/render_recording.py" download="render_recording.py">Download render_recording.py</a></div>
+            <div><p class="field-help">With Homebrew Python on a Mac, create and activate an export environment in that folder.</p>
+              <pre class="command"><code>python3 -m venv .export-venv
+source .export-venv/bin/activate</code></pre></div>
+            <div><p class="field-help">Before the first export, install Pillow in the Python environment you will use to run the converter.</p>
+              <pre class="command"><code>python3 -m pip install Pillow</code></pre></div>
             <div><p class="field-help">Run this command in that folder using your ZIP filename. By default, the video follows the camera’s sensor timestamps.</p>
               <pre class="command"><code id="mp4-command">python3 render_recording.py recording.zip output.mp4</code></pre>
               <button class="button secondary small" id="copy-mp4-command" type="button">Copy command</button></div>
@@ -348,6 +353,29 @@ gst-launch-1.0 videotestsrc num-buffers=90 ! videoconvert ! autovideosink</code>
         </form>
       </section>
       <section id="page-network" class="settings-page" aria-label="Network settings" hidden>
+        <form id="network-station-form" class="panel settings-card" autocomplete="off">
+          <header class="panel-title"><h2>Join Wi-Fi network</h2><svg><use href="#i-wifi"/></svg></header>
+          <div class="form-body">
+            <div class="device-list" id="station-connected" hidden></div>
+            <p class="field-help" id="station-status" role="status"></p>
+            <fieldset id="station-fields" class="station-fields" hidden>
+              <label id="station-interface-field" hidden>Wi-Fi interface<select id="station-interface"></select></label>
+              <div><button class="button secondary small" id="station-scan" type="button">Scan networks</button></div>
+              <p class="field-help" id="station-scan-status" role="status"></p>
+              <label>Nearby network<select id="station-network" required>
+                <option value="">Choose a network</option><option value="manual">Enter network name manually…</option>
+              </select></label>
+              <div class="field-pair" id="station-manual" hidden>
+                <label>Network name (SSID)<input id="station-ssid" maxlength="32" required disabled spellcheck="false" autocapitalize="none"></label>
+                <label>Security<select id="station-security" disabled><option value="wpa2-personal">WPA2-Personal</option><option value="wpa3-personal">WPA3-Personal</option><option value="open">Open</option></select></label>
+              </div>
+              <label class="check-line" id="station-hidden-field" hidden><input id="station-hidden" type="checkbox" disabled>Hidden network</label>
+              <label id="station-password-field" hidden>Wi-Fi password<input id="station-password" type="password" required disabled autocomplete="new-password"></label>
+              <div><button class="button primary" id="station-connect" type="submit" disabled>Connect to Wi-Fi</button></div>
+            </fieldset>
+            <p class="field-help" id="station-result" role="status"></p>
+          </div>
+        </form>
         <article class="panel settings-card"><header class="panel-title"><h2>Wi-Fi access point</h2><svg><use href="#i-wifi"/></svg></header>
           <div class="form-body">
             <p id="network-wifi-message" class="field-help" role="status"></p>
@@ -375,9 +403,13 @@ gst-launch-1.0 videotestsrc num-buffers=90 ! videoconvert ! autovideosink</code>
               <label>Operating mode<select name="mode" required></select></label>
             </div>
             <label id="network-radio" hidden>Wi-Fi interface for the bridge<select name="wifi_interface" required disabled></select></label>
+            <div class="field-pair" id="network-station-options" hidden>
+              <label>Wi-Fi security<select name="security" required disabled><option value="">Choose security</option><option value="wpa2-personal">WPA2-Personal</option><option value="wpa3-personal">WPA3-Personal</option><option value="open">Open</option></select></label>
+              <label class="check-line"><input name="hidden_ssid" type="checkbox" disabled>Hidden network</label>
+            </div>
             <div class="field-pair" id="network-wireless" hidden>
               <label>Network name (SSID)<input name="ssid" maxlength="32" required disabled autocomplete="off" spellcheck="false"></label>
-              <label>Wi-Fi password<input name="password" type="password" minlength="8" maxlength="64" required disabled autocomplete="new-password" aria-describedby="network-password-help"></label>
+              <label id="network-password-field">Wi-Fi password<input name="password" type="password" required disabled autocomplete="new-password" aria-describedby="network-password-help"></label>
             </div>
             <p id="network-password-help" class="field-help" hidden>WPA2-Personal. Use 8–63 printable ASCII characters or a 64-digit hexadecimal key.</p>
             <label>IPv4 assignment<select name="ipv4_method" required></select></label>

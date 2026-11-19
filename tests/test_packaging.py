@@ -14,6 +14,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from rpi_web_control.web import STATIC_FILES
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -106,6 +108,10 @@ class PackageTests(unittest.TestCase):
                             "ProtectHome", "ReadOnlyPaths", "ReadWritePaths"):
                     self.assertNotIn(key, nvme_unit)
                 library = "./usr/lib/rpi-web-control/"
+                static = library + "rpi_web_control/static/"
+                self.assertEqual({entry.name.removeprefix(static) for entry in data if entry.isfile()
+                                  and entry.name.startswith(static)},
+                                 {file for file, _ in STATIC_FILES.values()})
                 for member in data.getmembers():
                     if member.isfile() and member.name.startswith(library):
                         path = Path(tmp) / member.name
@@ -136,3 +142,5 @@ class PackageTests(unittest.TestCase):
                 self.assertEqual(data.extractfile(f"{docs}/tools/render_recording.py").read(), converter)
                 self.assertEqual(data.extractfile(library + "tools/render_recording.py").read(), converter)
                 self.assertTrue(data.getmember(f"{docs}/docs/post-processing.md").isfile())
+                self.assertTrue(data.getmember(f"{docs}/docs/assets/gpio-header-40pin.svg").isfile())
+                self.assertTrue(data.getmember(f"{docs}/docs/hardware-results/pi5-ov9281-preview.md").isfile())

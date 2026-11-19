@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 
 from .network_profiles import BRIDGE, NM, OWNER, PROPERTIES, build_profiles, inventory, validate_selection
+from .wifi_scan import request_scan as request_wifi_scan
 
 ROOT = "/org/freedesktop/NetworkManager"
 SETTINGS = NM + ".Settings"
@@ -23,6 +24,10 @@ JOURNAL_NAME = "pending.json"
 
 class NetworkConflict(RuntimeError):
     """The pending network change has expired or belongs to another request."""
+
+
+class _ActivationFailed(RuntimeError):
+    """NetworkManager could not bring up a candidate connection."""
 
 
 def _owned(profile):
@@ -121,7 +126,7 @@ class NetworkTransaction:
                 raise RuntimeError("The active network profile has changed.")
             state = int(properties["State"])
             if state >= 3:
-                raise RuntimeError("Network activation failed. Check the link and network settings.")
+                raise _ActivationFailed("Network activation failed. Check the link and network settings.")
             if state != 2:
                 return False
             records.append(properties)
@@ -196,6 +201,12 @@ class NetworkTransaction:
             if not radio["enabled"]:
                 self.nm.iface(ROOT, PROPERTIES).Set(NM, "WirelessEnabled", self.nm.dbus.Boolean(True))
 
+    def request_scan(self, interface, *, allow_ap_scan=False):
+        with self._lock():
+            if self._reconcile():
+                raise NetworkConflict("Finish the pending network change before scanning Wi-Fi.")
+            return request_wifi_scan(self.nm, interface, allow_ap_scan=allow_ap_scan)
+
     def stage(self, settings):
         with self._lock():
             if self._reconcile():
@@ -234,14 +245,17 @@ class NetworkTransaction:
                     trial["active"].append(str(active))
                 while not self._ready(trial):
                     if time.monotonic() >= deadline:
-                        raise RuntimeError("Timed out waiting for network activation and IPv4.")
+                        raise _ActivationFailed("Timed out waiting for network activation and IPv4.")
                     time.sleep(0.25)
                 trial["expires_monotonic_ns"] = time.monotonic_ns() + CONFIRM_TIMEOUT * 1_000_000_000
                 self.nm.manager.CheckpointAdjustRollbackTimeout(checkpoint, CONFIRM_TIMEOUT)
                 self._save(trial, "pending")
                 return self._pending(trial)
-            except Exception:
+            except Exception as exc:
                 self._rollback(trial)
+                if settings["mode"] == "station" and isinstance(exc, (_ActivationFailed, self.nm.dbus.DBusException)):
+                    raise RuntimeError("Wi-Fi connection failed. Check the network name, security, password "
+                                       "and IPv4 settings, then try again.") from None
                 raise
 
     def _requested(self, transaction_id):

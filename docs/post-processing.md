@@ -20,6 +20,8 @@ python3 -m pip install 'Pillow>=9.4'
 ffmpeg -hide_banner -filters | grep -w fsync
 ```
 
+If the converter reports `No module named 'PIL'`, activate the export environment and run `python3 -m pip install Pillow` there. Pillow provides the `PIL` module used to draw the timestamps.
+
 With the virtual environment active, substitute the name of the downloaded ZIP and choose a new output filename:
 
 ```sh
