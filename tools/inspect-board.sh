@@ -67,7 +67,7 @@ service_state=$(systemctl is-active rpi-web-control.service 2>/dev/null) || serv
 printf 'rpi-web-control.service: %s\n' "$service_state"
 case "$service_state" in
     active|activating|reloading|deactivating)
-        printf 'Read the detected sensor and supported FPS on the Camera page.\n' ;;
+        printf 'Read the detected sensor and supported FPS in Camera settings.\n' ;;
     inactive|failed)
         inspect rpicam-hello --list-cameras ;;
     *)

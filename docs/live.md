@@ -1,6 +1,6 @@
 # Receive live video on a remote computer
 
-The **Stream** page sends color RTP/JPEG over UDP. By default the sender attempts to transmit every captured frame. You can limit the stream rate while capturing and recording at the selected camera rate. The browser's **Monitor** page offers a separate MJPEG preview.
+The **Network stream** page sends color RTP/JPEG over UDP. By default the sender attempts to transmit every captured frame. You can limit the stream rate while capturing and recording at the selected camera rate. The browser's **Capture monitor** page offers a separate MJPEG preview.
 
 ## Install GStreamer on the receiving computer
 
@@ -61,9 +61,9 @@ If an inspection reports a missing element, check the install above. The UDP sou
 
 1. Connect the receiving computer and Pi via Ethernet or Wi-Fi. In station mode use the Pi's LAN address. In AP mode join the Pi's Wi-Fi network and use its AP address. Check a connected Pi with `hostname -I`, or use its DHCP lease. A routed VPN can carry HTTPS and UDP between sites.
 2. Open `https://<pi-hostname>.local:8080`. Verify the server certificate on first use. If the console prompts for a token, read it via trusted SSH with `sudo cat /etc/rpi-web-control/token` and sign in. [Package guide](package.md)
-3. In **Camera**, select the resolution and frame rate. For a 240 fps run, select a sensor mode reporting at least 240 fps at the required dimensions. The IMX577 on the inventoried Pi 5 reports 364.70 fps at 1280 × 720 and 175.47 fps at 1920 × 1080. Select 1280 × 720 for a 240 fps trial on that board. RTP/JPEG encodes each output dimension in units of eight pixels, with a maximum of 2040 pixels per dimension. Other sizes remain available for local capture. Stop a running stream before changing the camera mode.
+3. In **Camera settings**, select the resolution and frame rate. For a 240 fps run, select a sensor mode reporting at least 240 fps at the required dimensions. The IMX577 on the inventoried Pi 5 reports 364.70 fps at 1280 × 720 and 175.47 fps at 1920 × 1080. Select 1280 × 720 for a 240 fps trial on that board. RTP/JPEG encodes each output dimension in units of eight pixels, with a maximum of 2040 pixels per dimension. Other sizes remain available for local capture. Stop a running stream before changing the camera mode.
 4. Allow inbound UDP on the receiving computer from the Pi's address on the selected port (default 5004). On Windows, select the firewall profile used by this network. On macOS, allow incoming connections for the GStreamer receiver if prompted.
-5. Open **Stream**. Leave **Receiver IP** empty to use the address of the device that starts the stream. To control the Pi from a phone and watch on a MacBook, enter the MacBook's Ethernet or Wi-Fi address, for example `192.168.55.10` if that is its address on the Pi's LAN. Also enter the receiver's address when the console is behind a reverse proxy or SSH port forward. The Pi needs a route to the address you enter. Set **Receiver UDP port** and select **Copy receiver command**. Run the command in Terminal on the receiving Mac or Linux computer, or in Command Prompt on Windows. Leave that terminal open while receiving. This example listens on IPv4 port 5004.
+5. Open **Network stream**. Under **Play video on**, choose **This device** to send video to the displayed address. To control the Pi from a phone and watch on a MacBook, choose **Another computer** and enter the MacBook's Ethernet or Wi-Fi address, for example `192.168.55.10` if that is its address on the Pi's LAN. Also enter the receiver's address when the console is behind a reverse proxy or SSH port forward. The Pi needs a route to the address you enter. To change the default UDP port, expand **Port and frame rate** and set **Receiver UDP port**. Select **Copy receiver command**. Run the command in Terminal on the receiving Mac or Linux computer, or in Command Prompt on Windows. Leave that terminal open while receiving. This example listens on IPv4 port 5004.
 
 ```sh
 gst-launch-1.0 -v udpsrc port=5004 buffer-size=1048576 caps="application/x-rtp,media=video,encoding-name=JPEG,clock-rate=90000,payload=26" ! rtpjpegdepay ! queue max-size-buffers=1 max-size-bytes=0 max-size-time=0 leaky=downstream ! jpegdec ! autovideosink sync=false
@@ -80,11 +80,11 @@ Each frame is compressed independently. The sender uses the exposure timestamp f
 
 End-to-end delay includes exposure, readout, JPEG encoding, packet transit, decoding and display refresh. At 240 fps one frame period is about 4.17 ms. A literal zero-millisecond delay is physically unattainable. A slower display can accept decoded frames faster than it can present distinct images.
 
-Use the **Stream** sender bitrate as a starting point for capacity measurements. For example, 30,000 JPEG bytes/frame at 240 fps require 57.6 Mbit/s before protocol overhead. JPEG size depends on scene content. Verify with a detailed moving scene over the intended Ethernet or Wi-Fi link.
+Use the **Network stream** sender bitrate as a starting point for capacity measurements. For example, 30,000 JPEG bytes/frame at 240 fps require 57.6 Mbit/s before protocol overhead. JPEG size depends on scene content. Verify with a detailed moving scene over the intended Ethernet or Wi-Fi link.
 
 ## When playback stutters
 
-Under **Stream performance**, compare **Capture rate** and **Sender rate** while the problem is visible. A message indicates whether the sender has replaced queued frames or dropped frames due to a busy network socket. Open **Sender diagnostics** to see which counters are still rising. Each stream starts with fresh counters.
+Under **Stream performance**, compare **Camera frame rate** and **Frames sent per second** while the problem is visible. A message indicates whether the sender has replaced queued frames or dropped frames due to a busy network socket. Open **Sender diagnostics** to see which counters are still rising. Each stream starts with fresh counters.
 
 | Counter | What an increase means |
 | --- | --- |
@@ -93,7 +93,7 @@ Under **Stream performance**, compare **Capture rate** and **Sender rate** while
 | UDP retries | The Pi's UDP socket temporarily could not accept a packet. The sender retried the same fragment. A retry can succeed with the whole frame delivered to the socket. |
 | Network congestion drops | The socket remained busy beyond the retry window for a JPEG. The sender abandoned that frame and moved on. |
 
-If **Capture rate** stays near the camera setting while queue replacements or congestion drops climb, try a lower **Stream FPS limit**, such as 60 for a 240 fps capture. This reduces JPEG encoding and network load. If the sender keeps up and the picture still stutters, measure decoded FPS on the receiving computer using the command below. **Frames sent** counts complete frames submitted to the Pi's socket. Packets can still be lost on the link, and decoding or display can also limit playback.
+If **Camera frame rate** stays near the camera setting while queue replacements or congestion drops climb, try a lower **Stream FPS limit**, such as 60 for a 240 fps capture. This reduces JPEG encoding and network load. If the sender keeps up and the picture still stutters, measure decoded FPS on the receiving computer using the command below. **Frames sent** counts complete frames submitted to the Pi's socket. Packets can still be lost on the link, and decoding or display can also limit playback.
 
 ## Acceptance on the intended link
 

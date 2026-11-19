@@ -17,6 +17,7 @@ Inspect `rpi_web_control/capture.py` for completed requests and sensor selection
 6. Use the [mode checker](../../tools/check-camera-modes.py) on the connected Pi to measure sensor cadence at each advertised size and depth, including 240 fps where supported. Follow [hardware validation](../../docs/hardware-validation.md) for the separate recording and receiving measurements.
 7. Treat discovery failure with an empty result list as an unmeasured run. Correlate the CFE and ISP media locks with the controller PID before attributing a busy camera to a service. Compare timestamps when the diagnostic snapshot follows the failed attempt.
 8. Exercise the console test with one advertised mode, the whole inventory and a cancellation. Keep equal-size entries at different bit depths distinct. Check sample FPS against completed requests' sensor timestamps, surface a failed mode, and verify capture works again with its saved settings. Cover preview, streaming and recording ownership around a test.
+9. Open the camera's Video settings, Sensor tests and Boot profile views directly and via browser history. Verify that switching views preserves unsaved camera and boot selections. The controller should read boot configuration when the Boot profile view opens.
 
 ## Change timing or metadata
 

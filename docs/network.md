@@ -1,6 +1,6 @@
 # Ethernet and Wi-Fi
 
-On **Network**, expand **Join Wi-Fi network** to connect the Pi to a router, **Wi-Fi access point** to let a phone or laptop join the Pi directly, or **Connection settings** to set a fixed Ethernet address or create a bridge. **Network interfaces** lists the current addresses. A wired-only CM5 can configure Ethernet. Joining a Wi-Fi network requires a managed radio. To host an access point, enable the radio, configure its regulatory country in Raspberry Pi OS and choose an adapter with AP support.
+On **Network settings**, expand **Join an existing Wi-Fi network** to connect the Pi to a router, **Host a Wi-Fi hotspot** to let a phone or laptop join the Pi directly, or **Edit adapter and IP settings** to set a fixed Ethernet address or create a bridge. **Console addresses** lists the primary address of each connected adapter or bridge. Use the link for the network your computer is on. A wired-only CM5 can configure Ethernet. Joining a Wi-Fi network requires a managed radio. To host an access point, enable the radio, configure its regulatory country in Raspberry Pi OS and choose an adapter with AP support.
 
 | Connection | When to use it | Where the Pi's IPv4 address belongs |
 | --- | --- | --- |
@@ -12,7 +12,7 @@ On **Network**, expand **Join Wi-Fi network** to connect the Pi to a router, **W
 ## Join an existing Wi-Fi network
 
 1. Open the console over Ethernet. For a direct cable, one example is `192.168.55.100/24` on the Pi and `192.168.55.10/24` on the laptop, with the wired gateway and DNS fields empty. If Ethernet already has your chosen static address, continue using it. If you need to set it first, follow [fixed wired address setup](#give-a-wired-pi-a-fixed-address).
-2. Open **Network → Join Wi-Fi network**. If the radio is off, choose **Enable Wi-Fi** on the Network page. If several adapters are available, select the **Wi-Fi interface**. Choose **Scan networks**. The Pi scans from its own location. Under **Nearby network**, select the SSID using the displayed signal strength and security type.
+2. Open **Network settings → Join an existing Wi-Fi network**. If the radio is off, choose **Enable Wi-Fi** on the Network settings page. If several adapters are available, select the **Wi-Fi interface**. Choose **Scan networks**. The Pi scans from its own location. Under **Nearby network**, select the SSID using the displayed signal strength and security type.
 3. Enter the Wi-Fi password for a WPA2-Personal or WPA3-Personal network, or select an open network. For a name missing from the scan, choose **Enter network name manually…**, enter the exact SSID and select its security type. Select **Hidden network** if the router hides its name.
 4. Choose **Connect to Wi-Fi**. The router gives the Wi-Fi interface an address by DHCP. From a device on that Wi-Fi LAN, open the displayed console URL and choose **Keep settings** within 120 seconds. You can also confirm from the wired console after checking the wireless connection. If activation fails or the trial expires, the Pi restores the previous Wi-Fi profile.
 
@@ -34,11 +34,11 @@ If the cache is also empty, check whether a phone next to the Pi can see the rou
 
 ## Create a Wi-Fi access point
 
-1. Open the console over Ethernet. In **Network → Wi-Fi access point**, choose **Enable Wi-Fi** if the radio is switched off. If several radios support AP mode, select the **Access point interface**. Choose **Set up access point** for a new network or **Edit access point** for an existing standalone AP.
-2. Use the proposed network name (`RPi-Camera`) or enter your own. Enter a WPA password of 8–63 printable ASCII characters, or a 64-digit hexadecimal key. **Local DHCP server** gives each phone or laptop an address automatically. Keep the suggested Pi address unless you need another unused subnet. A typical address is `10.42.0.1/24`.
-3. Select **Start access point**. On your phone or laptop, join the SSID using that password. If the client asks, stay connected to the network without internet. Open the exact console URL shown under **Wi-Fi access point**, for example `https://10.42.0.1:8080`. Choose **Keep settings** through this connection within 120 seconds to save the profile. The console works offline.
+1. Open the console over Ethernet. In **Network settings → Host a Wi-Fi hotspot**, choose **Enable Wi-Fi** if the radio is switched off. If several radios support AP mode, select the **Hotspot adapter**. Choose **Set up hotspot** for a new network or **Edit hotspot** for an existing standalone AP.
+2. Use the proposed network name (`RPi-Camera`) or enter your own. Enter a WPA password of 8–63 printable ASCII characters, or a 64-digit hexadecimal key. **Assign addresses to clients (DHCP server)** gives each phone or laptop an address automatically. Keep the suggested Pi address unless you need another unused subnet. A typical address is `10.42.0.1/24`.
+3. Select **Start hotspot**. On your phone or laptop, join the SSID using that password. If the client asks, stay connected to the network without internet. Open the exact console URL shown under **Host a Wi-Fi hotspot**, for example `https://10.42.0.1:8080`. Choose **Keep settings** through this connection within 120 seconds to save the profile. The console works offline.
 
-If you cannot reach the console over Wi-Fi, keep the cable connected. Choose **Roll back** over Ethernet or let the trial expire. The standalone AP uses the Wi-Fi interface and its own subnet. To put both links on the same LAN and use one address, see [bridge setup](#use-the-same-lan-over-cable-and-wi-fi).
+If you cannot reach the console over Wi-Fi, keep the cable connected. Choose **Restore previous settings** over Ethernet or let the trial expire. The standalone AP uses the Wi-Fi interface and its own subnet. To put both links on the same LAN and use one address, see [bridge setup](#use-the-same-lan-over-cable-and-wi-fi).
 
 ### If the access point is unavailable
 
@@ -56,7 +56,7 @@ The installed service provides a secondary management address, `192.168.55.100/2
 1. Connect the workstation's Ethernet port directly to the Pi's recovery port. On a board with one physical Ethernet port, use that port.
 2. Set the workstation's wired IPv4 address to `192.168.55.10` with prefix `24` (mask `255.255.255.0`). Leave the gateway and DNS empty. If the workstation also has a route to this subnet over Wi-Fi or a VPN, ensure traffic for the Pi uses the cable.
 3. Allow a timer cycle (about five seconds) plus time for the address-conflict check. Open `https://192.168.55.100:8080`. If SSH is enabled, use your board login, for example `ssh ubuntu@192.168.55.100`. The console and SSH each use their usual credentials.
-4. Open **Network** to inspect the primary configuration. When applying a change, reconnect over the intended primary address and interface before selecting **Keep settings**. Reaching the recovery address alone verifies only the recovery connection. An unconfirmed trial still expires after 120 seconds.
+4. Open **Network settings** to inspect the primary configuration. When applying a change, reconnect over the intended primary address and interface before selecting **Keep settings**. Reaching the recovery address alone verifies only the recovery connection. An unconfirmed trial still expires after 120 seconds.
 
 The recovery address uses one enabled physical Ethernet port with carrier. Automatic selection prefers `eth0`, then `end0`, then the first physical Ethernet name in alphabetical order. When that port belongs to the appliance's `br-rpi` bridge, the bridge owns the address and Wi-Fi clients on its LAN may also reach it. A separate Wi-Fi station and administrator-managed bridge are outside the recovery service's scope. Give the workstation its own address on the recovery subnet.
 
@@ -71,26 +71,26 @@ RPI_CONTROL_RECOVERY_INTERFACE=auto
 
 The next run of `rpi-web-control-recovery.timer` reads the file. To apply it immediately, run `sudo systemctl start rpi-web-control-recovery.service`. After changing the subnet, update the workstation's address and console URL accordingly.
 
-Reserve the recovery address for the Pi and exclude it from DHCP allocation on any shared LAN. This includes a LAN where the Pi's own **Local DHCP server** is running. If that server uses a different address for the Pi and its pool cannot exclude the recovery address, use a separate recovery subnet. If another host answers for the address, the service reports a conflict and skips assignment. Use a direct, isolated cable or choose a free address. When the primary configuration already supplies the recovery IP on the selected interface, the service leaves that configuration in place.
+Reserve the recovery address for the Pi and exclude it from DHCP allocation on any shared LAN. This includes a LAN where the Pi supplies DHCP addresses. If that server uses a different address for the Pi and its pool cannot exclude the recovery address, use a separate recovery subnet. If another host answers for the address, the service reports a conflict and skips assignment. Use a direct, isolated cable or choose a free address. When the primary configuration already supplies the recovery IP on the selected interface, the service leaves that configuration in place.
 
-**Network → Wired recovery** displays the address and its status, also available as `network.recovery` in `GET /api/status`. An active address is supplied by the recovery service. A native address is supplied by the existing network configuration. Waiting, conflict, disabled and error states explain why the service has not assigned an address. To investigate locally, run `systemctl status rpi-web-control-recovery.timer` and `journalctl -b -u rpi-web-control-recovery.service -n 20`.
+**Network settings → Wired recovery** displays the address and its status, also available as `network.recovery` in `GET /api/status`. An active address is supplied by the recovery service. A native address is supplied by the existing network configuration. Waiting, conflict, disabled and error states explain why the service has not assigned an address. To investigate locally, run `systemctl status rpi-web-control-recovery.timer` and `journalctl -b -u rpi-web-control-recovery.service -n 20`.
 
 ## Give a wired Pi a fixed address
 
-1. Expand **Network → Connection settings**, select the managed **Interface**, for example `eth0`, and choose **Ethernet** as the **Operating mode**. For automatic addressing, choose **DHCP client** to obtain the Pi's IPv4 address from the LAN's DHCP server. An optional DNS override replaces the servers supplied by DHCP.
-2. For the fixed address in this example, select **Static address** and enter `192.168.55.100/24`. Check that the address is unused and reserved for the Pi on this LAN. If the Pi needs to reach other networks or resolve hostnames, supply the LAN's gateway and DNS server addresses. Leave those fields empty for a direct, offline connection.
-3. Select **Apply temporarily**. On a direct cable without DHCP, give the workstation another unused address on the subnet, for example `192.168.55.10/24`. Open `https://192.168.55.100:8080` and use **Keep settings** to confirm.
+1. From **Network settings → Console addresses**, choose **Edit Ethernet settings** on the connected port. For a port without a primary address, open **Edit adapter and IP settings**, select the managed **Network adapter**, for example `eth0`, and choose **Ethernet** as the **Connection type**. For automatic addressing, choose **Get an address automatically (DHCP)** to obtain the Pi's IPv4 address from the LAN's DHCP server. An optional DNS override replaces the servers supplied by DHCP.
+2. For the fixed address in this example, select **Use a fixed address** and enter `192.168.55.100/24`. Check that the address is unused and reserved for the Pi on this LAN. If the Pi needs to reach other networks or resolve hostnames, supply the LAN's gateway and DNS server addresses. Leave those fields empty for a direct, offline connection.
+3. Select **Apply for 2 minutes**. On a direct cable without DHCP, give the workstation another unused address on the subnet, for example `192.168.55.10/24`. Open `https://192.168.55.100:8080` and use **Keep settings** to confirm.
 
 ## Use the same LAN over cable and Wi-Fi
 
-Connect the Ethernet cable to a live port before testing a bridge. Select the wired interface and choose **Ethernet + Wi-Fi bridge**, then select a separate AP-capable Wi-Fi interface. Enter an SSID and WPA-Personal password for the Pi's access point. The Pi places both interfaces in `br-rpi` and uses the bridge's IPv4 address for the console. A computer on Ethernet and a phone on the Pi's SSID can reach the same address.
+Connect the Ethernet cable to a live port before testing a bridge. Select the wired interface and choose **Bridge Ethernet and Wi-Fi**, then select a separate AP-capable Wi-Fi interface. Enter an SSID and WPA-Personal password for the Pi's access point. The Pi places both interfaces in `br-rpi` and uses the bridge's IPv4 address for the console. A computer on Ethernet and a phone on the Pi's SSID can reach the same address.
 
 | LAN | Bridge IPv4 settings | How clients get addresses |
 | --- | --- | --- |
-| Existing LAN, fixed Pi address | **Static address** with `192.168.55.100/24` and the LAN gateway and DNS if needed. | The existing LAN DHCP server supplies wired and wireless clients. |
-| Existing LAN, automatically assigned Pi address | **DHCP client** | The existing LAN DHCP server supplies the Pi and its clients. |
-| Isolated LAN, fixed client addresses | **Static address** with `192.168.55.100/24` and empty gateway and DNS | Assign each client a unique address such as `192.168.55.10/24`. |
-| Isolated LAN, Pi supplies addresses | **Local DHCP server** with the Pi at `192.168.55.100/24`. | NetworkManager runs a DHCP server for clients on both bridge ports. |
+| Existing LAN, fixed Pi address | **Use a fixed address** with `192.168.55.100/24` and the LAN gateway and DNS if needed. | The existing LAN DHCP server supplies wired and wireless clients. |
+| Existing LAN, automatically assigned Pi address | **Get an address automatically (DHCP)** | The existing LAN DHCP server supplies the Pi and its clients. |
+| Isolated LAN, fixed client addresses | **Use a fixed address** with `192.168.55.100/24` and empty gateway and DNS | Assign each client a unique address such as `192.168.55.10/24`. |
+| Isolated LAN, Pi supplies addresses | **Assign addresses to clients (DHCP server)** with the Pi at `192.168.55.100/24`. | NetworkManager runs a DHCP server for clients on both bridge ports. |
 
 Only enable the Pi's DHCP server on an isolated LAN where it is intended to assign client addresses. Connecting a bridge that serves DHCP to a LAN with another DHCP server can give clients conflicting gateway or DNS settings. Shared mode also provides DNS forwarding and can use NAT through an available uplink. The local console works without internet access. [NetworkManager IPv4 settings](https://www.networkmanager.dev/docs/api/latest/nm-settings-nmcli.html)
 
@@ -98,7 +98,7 @@ Only enable the Pi's DHCP server on an isolated LAN where it is intended to assi
 
 Network changes can move the console to another address or disconnect the browser. Note the current address before applying. When testing a station profile, join the target LAN. When testing an AP, join its SSID. For a static address, open the Pi at the address you entered. For DHCP, look up the Pi in the router's lease list or use its hostname if multicast DNS works on the new LAN. With token access enabled, a new address may prompt for sign-in.
 
-After activation, you have 120 seconds to confirm. Check that the console responds over the intended connection. In the pending-change banner on any page, choose **Keep settings** before the countdown expires or **Roll back** to restore the previous settings. For a bridge, test the same console address from a wired client and an AP client. If the new configuration is unreachable, allow the rollback timer to expire, reconnect the client to its previous network and reopen the original address. NetworkManager handles timed recovery on the board even if the browser is closed. Keep network adapters connected during a trial. When the first bridge is created, rollback can disconnect devices plugged in after staging. [NetworkManager checkpoint API](https://networkmanager.dev/docs/api/latest/gdbus-org.freedesktop.NetworkManager.html)
+After activation, you have 120 seconds to confirm. Check that the console responds over the intended connection. In the pending-change banner on any page, choose **Keep settings** before the countdown expires or **Restore previous settings** to restore the previous settings. For a bridge, test the same console address from a wired client and an AP client. If the new configuration is unreachable, allow the rollback timer to expire, reconnect the client to its previous network and reopen the original address. NetworkManager handles timed recovery on the board even if the browser is closed. Keep network adapters connected during a trial. When the first bridge is created, rollback can disconnect devices plugged in after staging. [NetworkManager checkpoint API](https://networkmanager.dev/docs/api/latest/gdbus-org.freedesktop.NetworkManager.html)
 
 ## API
 

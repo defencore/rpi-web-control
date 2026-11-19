@@ -20,6 +20,7 @@ Begin in `rpi_web_control/application.py` for recording ownership and `rpi_web_c
 ## Change a web or packaging boundary
 
 - When changing the browser, exercise a detected sensor mode, an unsaved form across a status refresh, and switching preview off during a recording. Check both desktop and narrow mobile widths.
+- Check that bookmarked page hashes, camera task links and browser history select the correct navigation entry and heading. Exercise the keyboard skip link and the mobile menu.
 - Keep the Stream page receiver setup in sync with [the workstation guide](../../docs/live.md). Verify the plug-in checks for each listed OS and generate the receive command using the selected destination's address family and UDP port. Check automatic delivery to the HTTPS peer and an explicit IPv4 or IPv6 receiver on another device. Exercise a start with `max_fps` omitted and with a limit. Verify that status refreshes preserve pending edits to the receiver and limit and that per-stream counters match the API.
 - Apply the configured token policy to reads and writes. Open a fresh browser session with package defaults and verify that the monitor opens without prompting for a token or offering sign-out. With token sign-in enabled, check the prompt, sign-in, sign-out and session expiry. Keep origin checks in both modes. Validate finite numeric values, accepted keys, and allowed storage paths on the server. Never use a web-supplied value as executable code.
 - Keep host clock changes in the dedicated clock helper. Preserve integer Unix epoch milliseconds for both `device_realtime_ms` and `browser_realtime_ms`. Exercise both directions of clock error, different browser time zones, explicit confirmation, and refusal during a manual or trigger claim. Test clock corrections with the simulator and check that the host clock is unaffected. [Operator procedure](../../docs/package.md#set-the-pi-clock-offline)
@@ -44,6 +45,8 @@ Keep USB and PCIe NVMe provisioning in the host-namespace helper. Bind a prepara
 Exercise single-session deletion and directory cleanup on verified managed media. Reject the system disk and all its partitions, a missing or replaced drive, stale review data and active recording claims. Confirm that unrelated files and incomplete sessions are preserved.
 
 For a session ZIP, retrieve the archive URL returned by the recording list and compare its three members byte-for-byte with the individual downloads. Check both video formats and prevent incomplete sessions or stale volume links from being exported. Exercise the downloaded archive with the workstation renderer.
+
+After stopping a clip, follow **View recording** and verify the full recording ID and download. Also look up an ID older than the first page, an incomplete clip and an ID absent from the selected drive. An exact lookup uses the same volume and file checks as the folder listing. Partial text filters the loaded pages.
 
 ## Change boot settings
 

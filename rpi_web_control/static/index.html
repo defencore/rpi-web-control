@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#13251d">
-  <title>Monitor · Capture Control</title>
+  <title>Capture monitor · Capture Control</title>
   <link rel="stylesheet" href="/static/style.css">
   <script type="module" src="/static/app.js"></script>
 </head>
@@ -45,17 +45,24 @@
     </section>
   </main>
   <div id="workspace" class="workspace" hidden>
+    <a id="skip-navigation" class="skip-navigation" href="#page-title">Skip to page content</a>
     <aside class="sidebar">
       <a class="brand" href="#monitor" aria-label="Capture Control monitor"><svg class="brand-icon"><use href="#i-brand"/></svg><span>Capture Control</span></a>
       <button id="nav-toggle" class="quiet nav-toggle" aria-expanded="false" aria-controls="main-nav" type="button"><svg aria-hidden="true"><use href="#i-menu"/></svg>Menu</button>
       <nav id="main-nav" aria-label="Main navigation">
-        <a href="#monitor" data-page="monitor" aria-current="page"><svg><use href="#i-monitor"/></svg>Monitor</a>
-        <a href="#recordings" data-page="recordings"><svg><use href="#i-recordings"/></svg>Recordings</a>
-        <a href="#live" data-page="live"><svg><use href="#i-broadcast"/></svg>Stream</a>
-        <a href="#camera" data-page="camera"><svg><use href="#i-camera"/></svg>Camera</a>
-        <a href="#storage" data-page="storage"><svg><use href="#i-drive"/></svg>Storage</a>
-        <a href="#triggers" data-page="triggers"><svg><use href="#i-trigger"/></svg>Triggers</a>
-        <a href="#network" data-page="network"><svg><use href="#i-wifi"/></svg>Network</a>
+        <div class="nav-group" role="group" aria-labelledby="capture-nav-label">
+          <p id="capture-nav-label">Capture</p>
+          <a href="#monitor" data-page="monitor" aria-current="page"><svg aria-hidden="true"><use href="#i-monitor"/></svg>Capture monitor</a>
+          <a href="#recordings" data-page="recordings"><svg aria-hidden="true"><use href="#i-recordings"/></svg>Recordings</a>
+          <a href="#live" data-page="live"><svg aria-hidden="true"><use href="#i-broadcast"/></svg>Network stream</a>
+        </div>
+        <div class="nav-group" role="group" aria-labelledby="setup-nav-label">
+          <p id="setup-nav-label">Configuration</p>
+          <a href="#camera" data-page="camera"><svg aria-hidden="true"><use href="#i-camera"/></svg>Camera settings</a>
+          <a href="#storage" data-page="storage"><svg aria-hidden="true"><use href="#i-drive"/></svg>Recording drives</a>
+          <a href="#triggers" data-page="triggers"><svg aria-hidden="true"><use href="#i-trigger"/></svg>Recording triggers</a>
+          <a href="#network" data-page="network"><svg aria-hidden="true"><use href="#i-wifi"/></svg>Network settings</a>
+        </div>
       </nav>
       <footer class="sidebar-footer"><div class="connection"><i class="lamp" id="connection-lamp"></i><div><span id="connection-status">Connecting</span><span id="access-mode"></span></div></div>
         <button id="logout" class="quiet" hidden><svg><use href="#i-logout"/></svg>Sign out</button></footer>
@@ -63,7 +70,7 @@
     <main class="content" id="main">
       <header class="page-header">
         <div><div class="device-name"><svg><use href="#i-camera"/></svg><span id="device-name">Capture device</span></div>
-        <h1 id="page-title" tabindex="-1">Monitor</h1></div>
+        <h1 id="page-title" tabindex="-1">Capture monitor</h1></div>
         <div class="record-toolbar">
           <div class="record-controls"><span id="record-state" class="status-chip" role="status">Checking</span>
             <button id="record" class="button record-button" type="button" disabled><svg aria-hidden="true"><use href="#i-record"/></svg><span>Start recording</span></button></div>
@@ -76,18 +83,23 @@
       <div id="storage-alert" class="notice error" role="status" hidden>
         <strong>Recording destination unavailable</strong><p id="storage-alert-reason"></p><a href="#storage">Check recording storage</a>
       </div>
-      <p id="feedback" class="notice" role="status" aria-live="polite"></p>
+      <div id="feedback-bar" class="feedback-bar notice" hidden>
+        <p id="feedback" role="status"></p><button id="dismiss-feedback" type="button" aria-label="Dismiss message">Dismiss</button>
+      </div>
+      <div id="recording-stopped" class="recording-stopped" hidden>
+        <span role="status">Recording stopped</span><a id="view-stopped-recording" href="#recordings">View recording <svg aria-hidden="true"><use href="#i-chevron"/></svg></a>
+      </div>
       <section class="clock-notice" id="trigger-pause-notice" aria-label="Recording triggers paused" hidden>
         <div><strong>Recording triggers paused</strong><p class="field-help">Return any held contacts to their idle position before resuming.</p></div>
         <button id="resume-triggers" class="button secondary small" type="button">Resume triggers</button>
       </section>
       <section id="network-pending" class="network-pending" aria-labelledby="network-pending-title" hidden>
-        <div><h2 id="network-pending-title">Keep these network settings?</h2>
-          <p class="field-help">Check the primary console address over the intended connection. The Pi will restore the previous settings unless you keep the change.</p>
+        <div><h2 id="network-pending-title">Test the new connection</h2>
+          <p class="field-help">Reconnect to the console over the Ethernet or Wi-Fi connection you just configured, then choose Keep settings. When time runs out, the Pi restores the previous settings.</p>
           <p class="field-help" id="network-pending-recovery" hidden>You opened this console at the wired recovery address. Test the new primary connection before choosing Keep settings.</p>
           <p class="field-help" id="network-timer"></p></div>
         <div class="network-actions"><button class="button primary" type="button" id="network-confirm">Keep settings</button>
-          <button class="button secondary" type="button" id="network-rollback">Roll back</button></div>
+          <button class="button secondary" type="button" id="network-rollback">Restore previous settings</button></div>
       </section>
       <section id="clock-notice" class="clock-notice" aria-labelledby="clock-heading" hidden>
         <div>
@@ -103,7 +115,7 @@
           <button id="clock-dismiss" class="button secondary" type="button">Not now</button>
         </div>
       </section>
-      <section id="page-monitor" aria-label="Monitor">
+      <section id="page-monitor" aria-labelledby="page-title">
         <div id="recording-metrics" class="panel" hidden>
           <dl class="fact-grid">
             <div><dt>Video written</dt><dd id="monitor-written">—</dd></div>
@@ -117,49 +129,49 @@
             <header class="panel-title"><h2><svg aria-hidden="true"><use href="#i-preview"/></svg>Browser preview</h2><span class="status-chip" id="stream-state">Off</span></header>
             <div class="stage" id="stage">
               <img id="stream" alt="Live camera preview" hidden>
-              <div class="stage-empty" id="stage-empty"><svg><use href="#i-preview"/></svg><strong id="stage-title">Preview is off</strong><span id="stage-help">Enable preview to see the camera feed.</span></div>
+              <div class="stage-empty" id="stage-empty"><svg aria-hidden="true"><use href="#i-preview"/></svg><strong id="stage-title">Preview is off</strong><span id="stage-help">You can record with the preview off.</span></div>
             </div>
             <footer class="preview-tools">
-              <button id="preview" class="button secondary" type="button" aria-pressed="false"><svg><use href="#i-power"/></svg><span>Enable preview</span></button>
+              <button id="preview" class="button secondary" type="button"><svg aria-hidden="true"><use href="#i-power"/></svg><span>Start preview</span></button>
               <button id="fullscreen" class="icon-button" aria-label="Full screen preview" title="Full screen preview" disabled><svg><use href="#i-expand"/></svg></button>
             </footer>
           </article>
-          <article class="panel readings">
-            <header class="panel-title"><h2>Capture status</h2><svg><use href="#i-trigger"/></svg></header>
-            <div class="metric"><span>Measured frame rate</span><div><strong id="actual-fps">—</strong> <span>fps</span></div></div>
-            <dl class="readout-list">
-              <div><dt>Resolution</dt><dd id="resolution">—</dd></div>
-              <div><dt>Target rate</dt><dd id="target-fps">—</dd></div>
-              <div><dt>Active sensor mode</dt><dd id="active-sensor-mode">—</dd></div>
-              <div><dt>On-screen display</dt><dd id="osd-status">—</dd></div>
-              <div><dt id="frame-count-label">Recorded frames</dt><dd id="frame-count">—</dd></div>
-              <div><dt>Estimated missed frames</dt><dd id="dropped-count">—</dd></div>
-            </dl>
+          <article class="panel monitor-setup">
+            <header class="panel-title"><h2>Recording setup</h2></header>
+            <a class="setup-row" href="#camera"><svg aria-hidden="true"><use href="#i-camera"/></svg><div><strong>Camera settings</strong><span><span id="resolution">—</span> at <span id="target-fps">—</span></span></div><svg aria-hidden="true"><use href="#i-chevron"/></svg></a>
+            <a class="setup-row" href="#storage"><svg aria-hidden="true"><use href="#i-drive"/></svg><div><strong>Recording destination</strong><span id="monitor-destination">—</span><small id="monitor-space">—</small></div><svg aria-hidden="true"><use href="#i-chevron"/></svg></a>
+            <a class="setup-row" href="#triggers"><svg aria-hidden="true"><use href="#i-trigger"/></svg><div><strong>Recording triggers</strong><span id="trigger-summary">—</span></div><svg aria-hidden="true"><use href="#i-chevron"/></svg></a>
           </article>
         </div>
-        <div class="summary-layout">
-          <article class="panel summary"><header><svg><use href="#i-drive"/></svg><h2>Recording destination</h2></header>
-            <div class="summary-body"><strong id="monitor-destination">—</strong>
-              <p id="record-location" class="mono"></p><p id="monitor-space" class="subtle">—</p>
-              <meter id="disk-usage" aria-label="Disk space used" min="0" max="100" hidden></meter></div>
-            <a id="monitor-browse" class="panel-link" href="#recordings">Browse recordings <svg><use href="#i-chevron"/></svg></a></article>
-          <article class="panel summary"><header><svg><use href="#i-trigger"/></svg><h2>Triggers</h2></header>
-            <div class="summary-body"><strong id="trigger-count">—</strong><p id="trigger-summary" class="subtle"></p></div>
-            <a class="panel-link" href="#triggers">Manage triggers <svg><use href="#i-chevron"/></svg></a></article>
-        </div>
+        <article class="panel monitor-activity">
+          <header class="panel-title"><h2>Camera activity</h2><a class="text-link" id="monitor-browse" href="#recordings">Browse recordings</a></header>
+          <dl class="activity-readings"><div><dt>Measured frame rate</dt><dd id="actual-fps">—</dd></div>
+            <div><dt id="frame-count-label">Recorded frames</dt><dd id="frame-count">—</dd></div>
+            <div><dt>Estimated missed frames</dt><dd id="dropped-count">—</dd></div></dl>
+          <details class="monitor-details"><summary>Sensor and storage details</summary><dl class="fact-grid">
+            <div><dt>Active sensor mode</dt><dd id="active-sensor-mode">—</dd></div>
+            <div><dt>Timestamp overlay</dt><dd id="osd-status">—</dd></div>
+            <div><dt>Recording folder on Pi</dt><dd id="record-location">—</dd></div></dl>
+            <meter id="disk-usage" aria-label="Disk space used" min="0" max="100" hidden></meter></details>
+        </article>
         <p id="camera-error" class="notice error" role="status"></p>
       </section>
-      <section id="page-live" class="settings-page" aria-label="Live stream" hidden>
+      <section id="page-live" class="settings-page" aria-label="Network stream" hidden>
         <form id="live-form" class="panel settings-card">
           <header class="panel-title"><h2>Stream to a computer</h2><span class="status-chip" id="live-state">Off</span></header>
           <div class="form-body">
-            <dl class="fact-grid"><div><dt>Camera output</dt><dd id="live-mode">—</dd></div><div id="live-destination" hidden><dt>Receiver IP and port</dt><dd id="live-endpoint">—</dd></div><div id="live-active-limit" hidden><dt>Stream FPS limit</dt><dd id="live-active-max-fps">—</dd></div></dl>
-            <div id="live-receiver-fields" class="field-pair">
-              <label>Receiver IP<input id="live-host" name="host" type="text" placeholder="Automatic" aria-describedby="live-host-help" autocapitalize="none" autocomplete="off" spellcheck="false" maxlength="64"></label>
-              <label>Receiver UDP port<input id="live-port" name="port" type="number" min="1024" max="65535" step="1" value="5004" required></label>
-              <label>Stream FPS limit<input id="live-max-fps" name="max_fps" type="number" min="1" max="1000" step="1" placeholder="Camera rate" aria-describedby="live-fps-help"></label>
-              <p id="live-host-help" class="field-help">Leave the IP blank to send video to this device. If you control the Pi from a phone and watch on a computer, enter the computer’s IP.</p>
-              <p id="live-fps-help" class="field-help">A lower limit uses less bandwidth. Local recording keeps the camera rate.</p>
+            <dl class="fact-grid"><div><dt>Camera output</dt><dd><a href="#camera" id="live-mode" class="text-link" title="Open Camera settings">—</a></dd></div><div id="live-destination" hidden><dt>Receiver IP and port</dt><dd id="live-endpoint">—</dd></div><div id="live-active-limit" hidden><dt>Stream FPS limit</dt><dd id="live-active-max-fps">—</dd></div></dl>
+            <div id="live-receiver-fields">
+              <fieldset class="receiver-choices"><legend>Play video on</legend>
+                <label class="check-line"><input type="radio" name="receiver" value="browser" checked><span>This device <span class="mono subtle" id="live-peer-address"></span></span></label>
+                <label class="check-line"><input type="radio" name="receiver" value="other"><span>Another computer</span></label>
+              </fieldset>
+              <div id="live-host-field" hidden><label>Receiver IP<input id="live-host" name="host" type="text" placeholder="192.168.55.10" aria-describedby="live-host-help" autocapitalize="none" autocomplete="off" spellcheck="false" maxlength="64" required disabled></label>
+                <p id="live-host-help" class="field-help">Enter the address of the computer running GStreamer.</p></div>
+              <details id="live-transport"><summary>Port and frame rate</summary><div class="field-pair">
+                <label>Receiver UDP port<input id="live-port" name="port" type="number" min="1024" max="65535" step="1" value="5004" required></label>
+                <label>Stream FPS limit<input id="live-max-fps" name="max_fps" type="number" min="1" max="1000" step="1" placeholder="Camera rate" aria-describedby="live-fps-help"></label>
+              </div><p id="live-fps-help" class="field-help">A lower limit uses less bandwidth. Local recording keeps the camera rate.</p></details>
             </div>
             <details id="live-player" open>
               <summary>Open the player on the receiving computer</summary>
@@ -170,12 +182,12 @@
             <p id="live-limit" class="field-help" role="status"></p>
             <p class="notice error" id="live-error" role="status"></p>
           </div>
-          <footer class="form-footer"><button type="submit" id="live-toggle" class="button primary" disabled>Start live stream</button><a class="text-link" href="#camera">Camera settings</a></footer>
+          <footer class="form-footer"><button type="submit" id="live-toggle" class="button primary" disabled>Start live stream</button><a class="text-link" href="#monitor">View browser preview</a></footer>
         </form>
         <article class="panel" id="live-statistics" hidden>
           <header class="panel-title"><h2 id="live-stats-title">Stream performance</h2></header>
           <div class="form-body">
-            <dl class="fact-grid" id="live-rates"><div><dt>Capture rate</dt><dd id="live-capture-fps">—</dd></div><div><dt>Sender rate</dt><dd id="live-fps">—</dd></div><div><dt>Throughput</dt><dd id="live-bitrate">—</dd></div></dl>
+            <dl class="fact-grid" id="live-rates"><div><dt>Camera frame rate</dt><dd id="live-capture-fps">—</dd></div><div><dt>Frames sent per second</dt><dd id="live-fps">—</dd></div><div><dt>Outgoing bitrate</dt><dd id="live-bitrate">—</dd></div></dl>
             <dl class="fact-grid"><div><dt>Frames sent</dt><dd id="live-frames">—</dd></div><div><dt>Sender drops</dt><dd id="live-drops">—</dd></div></dl>
             <p id="live-pressure" class="field-help" role="status"></p>
             <details class="sender-details"><summary>Sender diagnostics</summary>
@@ -217,8 +229,13 @@ gst-launch-1.0 videotestsrc num-buffers=90 ! videoconvert ! autovideosink</code>
         </details>
       </section>
       <section id="page-camera" class="settings-page" aria-label="Camera settings" hidden>
-        <form id="camera-form" class="panel settings-card">
-          <header class="panel-title"><h2>Capture settings</h2><svg><use href="#i-tune"/></svg></header>
+        <nav class="camera-sections" id="camera-sections" aria-label="Camera settings sections">
+          <a href="#camera" aria-controls="camera-form" aria-current="page">Video settings</a>
+          <a href="#camera/tests" aria-controls="camera-tests-view">Sensor tests</a>
+          <a href="#camera/profile" aria-controls="camera-profile-view">Boot profile</a>
+        </nav>
+        <form id="camera-form" class="panel settings-card" data-camera-view>
+          <header class="panel-title"><h2 tabindex="-1">Resolution and frame rate</h2><svg aria-hidden="true"><use href="#i-tune"/></svg></header>
           <div class="form-body">
             <details id="camera-presets" class="camera-presets">
               <summary>Choose a detected sensor mode</summary>
@@ -238,17 +255,15 @@ gst-launch-1.0 videotestsrc num-buffers=90 ! videoconvert ! autovideosink</code>
               </dl>
               <p class="field-help" id="capture-format-help"></p>
             </div>
-          </div><footer class="form-footer"><button class="button primary" type="submit">Save camera settings</button><p class="field-help" id="camera-save-state" role="status"></p></footer>
+          </div><footer class="form-footer"><button class="button primary" type="submit">Save video settings</button><p class="field-help" id="camera-save-state" role="status"></p></footer>
         </form>
-        <article class="panel settings-card"><header class="panel-title"><h2>Detected sensor</h2></header>
-          <div class="form-body"><dl id="sensor-properties" class="fact-grid"></dl></div></article>
-        <article class="panel settings-card" aria-labelledby="mode-test-title">
-          <header class="panel-title"><h2 id="mode-test-title">Test sensor modes</h2></header>
+        <article class="panel settings-card" id="camera-tests-view" data-camera-view aria-labelledby="mode-test-title" hidden>
+          <header class="panel-title"><h2 id="mode-test-title" tabindex="-1">Measure sensor frame rate</h2></header>
           <div class="form-body">
-            <p class="field-help">Measure the frame rate the camera delivers at its advertised maximum. This test skips recording to disk. Starting a recording ends the test.</p>
+            <p class="field-help">Compare the measured FPS with the sensor’s advertised maximum. The test runs without writing video to disk. A recording trigger can interrupt it.</p>
             <div class="mode-test-controls">
               <label>Mode to test<select id="mode-test-selection"><option value="">All detected modes</option></select></label>
-              <button class="button secondary" id="mode-test-start" type="button">Run test</button>
+              <button class="button primary" id="mode-test-start" type="button">Run sensor test</button>
               <button class="button secondary" id="mode-test-cancel" type="button" hidden>Cancel test</button>
             </div>
             <p id="mode-test-lock" class="field-help"></p>
@@ -259,35 +274,45 @@ gst-launch-1.0 videotestsrc num-buffers=90 ! videoconvert ! autovideosink</code>
             </table>
           </div>
         </article>
-        <article class="panel settings-card">
-          <header class="panel-title"><h2>Camera boot configuration</h2><button class="button secondary small" id="firmware-reload" type="button">Reload</button></header>
+        <article class="panel settings-card" id="camera-profile-view" data-camera-view hidden>
+          <header class="panel-title"><h2 tabindex="-1">Camera profile at startup</h2><button class="button secondary small" id="firmware-reload" type="button">Reload boot file</button></header>
           <form id="boot-form">
             <div class="form-body">
               <p id="boot-message" class="field-help" role="status">Loading boot settings…</p>
               <dl class="fact-grid"><div><dt>Configured profile</dt><dd id="boot-current">—</dd></div><div><dt>Boot status</dt><dd id="boot-state">—</dd></div></dl>
-              <p class="field-help">Power down the device before connecting or moving a CSI ribbon. Stage the camera profile for the selected port, then reboot to load it.</p>
+              <p class="field-help">Choose the sensor and the port its ribbon cable uses. The Pi loads the saved profile when it next boots. Power down before connecting or moving a cable.</p>
               <div class="field-pair"><label>Sensor boot profile<select name="profile" id="boot-profile" required disabled></select></label>
                 <label>CSI connector<select name="port" id="boot-port" disabled><option value="cam0">CAM0</option><option value="cam1">CAM1</option></select></label></div>
-              <div id="boot-preview" hidden><p class="field-help">Boot settings to stage</p><pre class="boot-file" id="boot-directive"></pre></div>
+              <div id="boot-preview" hidden><p class="field-help">Changes to the boot file</p><pre class="boot-file" id="boot-directive"></pre></div>
               <p id="boot-conflicts" class="notice error" role="status"></p>
               <details><summary>View boot configuration file</summary><p class="file-path" id="boot-path"></p><pre class="boot-file" id="boot-file"></pre></details>
             </div>
-            <footer class="form-footer wrap"><button class="button primary" id="boot-apply" type="submit" disabled>Stage profile</button>
-              <button class="button secondary" id="boot-restore" type="button" disabled>Restore backup</button>
-              <button class="button secondary danger" id="boot-reboot" type="button" disabled>Reboot device…</button></footer>
+            <footer class="form-footer wrap"><button class="button primary" id="boot-apply" type="submit" disabled>Save for next boot</button>
+              <button class="button secondary" id="boot-restore" type="button" disabled>Restore boot backup…</button>
+              <button class="button secondary danger" id="boot-reboot" type="button" disabled>Reboot Pi…</button></footer>
           </form>
         </article>
+        <details class="panel camera-sensor">
+          <summary>Detected sensor details</summary>
+          <div class="form-body"><dl id="sensor-properties" class="fact-grid"></dl></div>
+        </details>
       </section>
       <section id="page-recordings" class="settings-page" aria-label="Recordings" hidden>
         <article class="panel settings-card">
           <header class="panel-title"><h2>Completed recordings</h2><button class="button secondary small" id="clips-refresh" type="button">Refresh recordings</button></header>
           <div class="form-body">
-            <div class="clips-location"><label>Browse recordings from<select id="clips-source"><option value="current">Current recording directory</option></select></label>
-              <p class="file-path" id="clips-directory"></p>
-              <a class="text-link" href="#storage">Change where new recordings are saved</a></div>
+            <div class="clip-filters">
+              <div class="clips-location"><label>Folder to browse<select id="clips-source"><option value="current">Current destination</option></select></label>
+                <p class="file-path" id="clips-directory"></p></div>
+              <div><label>Find recordings<input id="clips-filter" type="search" placeholder="Recording ID, date or format" autocomplete="off" spellcheck="false" aria-describedby="clips-search-help" aria-controls="clips-list clips-exact-list"></label>
+                <p id="clips-search-help" class="field-help">A full ID searches this folder. Other terms filter the recordings loaded below.</p></div>
+            </div>
+            <p class="field-help">To save future recordings elsewhere, <a class="text-link" href="#storage">change the recording destination</a>.</p>
             <p id="clips-in-progress" class="notice" role="status" hidden>Recording in progress. The clip will appear here after it finishes.</p>
             <p class="field-help" id="clips-message" role="status"></p>
+            <div class="clip-results"><p id="clips-count" role="status" class="field-help"></p><button class="button secondary small" id="clips-clear" type="button" hidden>Clear filter</button></div>
             <div class="recording-list" id="clips-list"></div>
+            <div class="recording-list" id="clips-exact-list" hidden></div>
             <button class="button secondary small" id="clips-more" type="button" hidden>Load older recordings</button>
           </div>
         </article>
@@ -307,11 +332,11 @@ source .export-venv/bin/activate</code></pre></div>
           </div>
         </details>
         <details class="panel storage-details" id="clips-cleanup" hidden>
-          <summary>Free up space</summary>
+          <summary>Delete recordings from this folder</summary>
           <div class="form-body">
             <p class="field-help">Review all completed recordings in the displayed directory for permanent deletion.</p>
             <p class="field-help" id="clips-delete-lock"></p>
-            <div><button class="button secondary small danger" id="clips-clean" type="button" hidden>Clean recordings…</button></div>
+            <div><button class="button secondary small danger" id="clips-clean" type="button" hidden>Review all recordings for deletion…</button></div>
           </div>
         </details>
         <dialog id="cleanup-dialog" aria-labelledby="cleanup-title">
@@ -332,37 +357,37 @@ source .export-venv/bin/activate</code></pre></div>
           </div>
         </dialog>
       </section>
-      <section id="page-storage" class="settings-page" aria-label="Storage settings" hidden>
+      <section id="page-storage" class="settings-page" aria-label="Recording drives" hidden>
         <article class="panel settings-card">
           <header class="panel-title"><h2>Recording destination</h2><button class="button secondary small" id="refresh-drives" type="button">Refresh drives</button></header>
           <div class="form-body">
-            <div class="active-storage" id="storage-current"><h3>Active directory</h3><strong id="storage-medium"></strong>
+            <div class="active-storage" id="storage-current"><h3>Current destination</h3><strong id="storage-medium"></strong>
               <p id="storage-active" class="file-path">—</p><p id="storage-capacity" class="field-help"></p>
               <p id="storage-recovery" class="field-help" hidden>Check that the selected drive is connected and mounted. Refresh drives to see the available destinations.</p>
-              <a class="text-link" id="browse-active" href="#recordings">Browse recordings in this directory</a></div>
+              <a class="text-link" id="browse-active" href="#recordings">View recordings in this folder</a></div>
             <div class="destination-list">
-              <h3>Save new recordings to</h3>
-              <div class="destination-row" id="nvme-ready" hidden><button class="button primary small" id="nvme-use" type="button">Record to NVMe</button><span id="nvme-path" class="file-path"></span></div>
-              <div class="destination-row" id="usb-ready" hidden><button class="button primary small" id="usb-use" type="button">Record to USB</button><span id="usb-path" class="file-path"></span></div>
+              <h3>Choose where to save new recordings</h3>
+              <div class="destination-row" id="nvme-ready" hidden><button class="button secondary small" id="nvme-use" type="button">Use NVMe</button><span id="nvme-path" class="file-path"></span></div>
+              <div class="destination-row" id="usb-ready" hidden><button class="button secondary small" id="usb-use" type="button">Use USB</button><span id="usb-path" class="file-path"></span></div>
               <div id="storage-choices" class="destination-list"></div>
               <div id="nvme-setup-shortcut" hidden><button class="button secondary small" id="nvme-open-setup" type="button">Set up NVMe…</button></div>
               <div id="usb-setup-shortcut" hidden><button class="button secondary small" id="usb-open-setup" type="button">Set up USB…</button></div>
-              <p class="field-help no-destinations">No recording volumes listed. Check the storage devices below.</p>
+              <p class="field-help no-destinations">No writable destinations found. Connect the drive and choose Refresh drives.</p>
               <p id="storage-lock" class="field-help" role="status"></p>
             </div>
           </div>
         </article>
+        <details class="panel storage-details" id="nvme-setup"><summary>Set up a PCIe NVMe drive</summary></details>
+        <details class="panel storage-details" id="usb-setup"><summary>Set up a USB drive</summary></details>
         <details class="panel storage-details" id="storage-custom">
-          <summary>Custom recording directory</summary>
+          <summary>Use a custom folder</summary>
           <form id="storage-form">
-            <div class="form-body"><label>Recording directory<input name="directory" required list="storage-options" spellcheck="false" autocomplete="off"></label><datalist id="storage-options"></datalist>
-              <div><h3>Allowed storage roots</h3><ul id="storage-roots" class="paths"></ul></div>
+            <div class="form-body"><label>Recording folder path<input name="directory" required list="storage-options" spellcheck="false" autocomplete="off" aria-describedby="storage-path-help"></label><datalist id="storage-options"></datalist>
+              <div><p id="storage-path-help" class="field-help">Choose one of these folders or enter the full path to a folder inside it.</p><ul id="storage-roots" class="paths"></ul></div>
               <p class="field-help" id="storage-draft" role="status"></p></div>
             <footer class="form-footer"><button class="button primary" type="submit">Save destination</button></footer>
           </form>
         </details>
-        <details class="panel storage-details" id="nvme-setup"><summary>PCIe NVMe setup</summary></details>
-        <details class="panel storage-details" id="usb-setup"><summary>USB drive setup</summary></details>
         <template id="drive-setup-template">
           <div class="form-body">
             <div><button class="button secondary small" data-part="refresh" type="button">Refresh</button></div>
@@ -386,30 +411,37 @@ source .export-venv/bin/activate</code></pre></div>
           </div>
         </template>
         <details class="panel storage-details" id="storage-devices">
-          <summary>Storage devices</summary>
+          <summary>Detected drives and partitions</summary>
           <div class="form-body"><div><button class="button secondary small" id="storage-refresh" type="button">Refresh devices</button></div>
             <p id="device-storage-message" class="field-help" role="status">Discovering devices…</p><div class="device-list" id="disk-list"></div></div>
         </details>
       </section>
       <section id="page-triggers" class="settings-page" aria-label="Recording triggers" hidden>
-        <article class="panel settings-card"><header class="panel-title"><h2>Recording rules</h2><button type="button" class="button secondary small" id="add-trigger"><svg><use href="#i-plus"/></svg>Add rule</button></header>
+        <article id="saved-rules" class="panel settings-card"><header class="panel-title"><h2>Saved rules</h2><button type="button" class="button primary small" id="add-trigger"><svg aria-hidden="true"><use href="#i-plus"/></svg>Add rule</button></header>
           <div class="form-body"><div id="trigger-list" class="rule-list"></div>
-            <button id="trigger-pause" class="button secondary small" type="button" hidden>Pause triggers</button></div>
+            <button id="trigger-pause" class="button secondary small" type="button" hidden>Pause all triggers</button></div>
         </article>
         <form id="trigger-form" class="panel settings-card" hidden>
           <header class="panel-title"><h2 id="rule-title">New rule</h2></header>
-          <div class="form-body">
-            <div class="field-pair"><label>Rule ID<input name="id" pattern="[a-zA-Z0-9_\-]{1,48}" maxlength="48" required autocomplete="off"></label>
-            <label>Trigger type<select name="type"><option value="timer">Timer</option><option value="gpio">GPIO contact</option><option value="sensor">Sensor threshold</option><option value="uart">UART command</option></select></label></div>
+          <fieldset class="form-body" id="rule-inputs">
+            <div class="field-pair"><label>Trigger source<select name="type"><option value="gpio">GPIO button or contact</option><option value="timer">Timer</option><option value="sensor">Sensor threshold</option><option value="uart">Serial command (UART)</option></select></label>
+            <label>Rule name<input name="id" pattern="[a-zA-Z0-9_\-]{1,48}" maxlength="48" required autocomplete="off" aria-describedby="rule-name-help">
+              <span id="rule-name-help" class="field-help">Use letters, numbers, hyphens or underscores.</span></label></div>
             <div class="type-fields" id="rule-fields"></div>
             <label class="check-line"><input type="checkbox" name="enabled" checked>Enable this rule</label>
-          </div><footer class="form-footer"><button class="button primary" type="submit">Save rule</button><button class="button secondary" type="button" id="cancel-rule">Cancel</button></footer>
+          </fieldset>
+          <p id="rule-error" class="notice error" role="alert" tabindex="-1"></p>
+          <footer class="form-footer"><button class="button primary" type="submit">Save rule</button><button class="button secondary" type="button" id="cancel-rule">Cancel</button>
+            <button class="button secondary danger" type="button" id="remove-rule" hidden>Delete rule…</button></footer>
         </form>
       </section>
       <section id="page-network" class="settings-page" aria-label="Network settings" hidden>
+        <article class="panel"><header class="panel-title"><h2>Console addresses</h2></header>
+          <div class="form-body" id="network-address-list"></div>
+        </article>
         <div class="panel network-tasks">
           <details class="network-task" id="network-join-task" name="network-task">
-            <summary>Join Wi-Fi network<span id="network-join-summary" class="field-help"></span></summary>
+            <summary>Join an existing Wi-Fi network<span id="network-join-summary" class="field-help"></span></summary>
             <form id="network-station-form" autocomplete="off">
               <div class="form-body">
                 <div class="device-list" id="station-connected" hidden></div>
@@ -428,31 +460,32 @@ source .export-venv/bin/activate</code></pre></div>
                   </div>
                   <label class="check-line" id="station-hidden-field" hidden><input id="station-hidden" type="checkbox" disabled>Hidden network</label>
                   <label id="station-password-field" hidden>Wi-Fi password<input id="station-password" type="password" required disabled autocomplete="new-password"></label>
-                  <div><button class="button primary" id="station-connect" type="submit" disabled>Connect to Wi-Fi</button></div>
+                  <div><button class="button primary" id="station-connect" type="submit" disabled>Connect to Wi-Fi</button>
+                    <p class="field-help">After connecting, open the Pi’s Wi-Fi address and choose Keep settings within 120 seconds.</p></div>
                 </fieldset>
                 <p class="field-help" id="station-result" role="status"></p>
               </div>
             </form>
           </details>
           <details class="network-task" id="network-ap-task" name="network-task">
-            <summary>Wi-Fi access point<span id="network-ap-summary" class="field-help"></span></summary>
+            <summary>Host a Wi-Fi hotspot<span id="network-ap-summary" class="field-help"></span></summary>
             <div class="form-body">
               <p id="network-wifi-message" class="field-help" role="status"></p>
               <div id="network-active-aps" class="device-list" hidden></div>
-              <label id="network-ap-interface-field" hidden>Access point interface<select id="network-ap-interface"></select></label>
+              <label id="network-ap-interface-field" hidden>Hotspot adapter<select id="network-ap-interface"></select></label>
               <div class="network-actions" id="network-wifi-actions" hidden>
                 <button id="network-enable-wifi" type="button" class="button primary" hidden>Enable Wi-Fi</button>
-                <button id="network-setup-ap" type="button" class="button primary" hidden>Set up access point</button>
+                <button id="network-setup-ap" type="button" class="button primary" hidden>Set up hotspot</button>
               </div>
             </div>
           </details>
           <details class="network-task" id="network-connection-task" name="network-task">
-            <summary>Connection settings<span class="field-help">Set a fixed Ethernet address, change IP settings or bridge Ethernet and Wi-Fi.</span></summary>
+            <summary>Edit adapter and IP settings<span class="field-help">Set a fixed Ethernet address, change an adapter’s role or bridge Ethernet and Wi-Fi.</span></summary>
             <form id="network-form" autocomplete="off" hidden>
               <fieldset id="network-fields" class="form-body">
                 <div class="field-pair">
-                  <label>Interface<select name="interface" required></select></label>
-                  <label>Operating mode<select name="mode" required></select></label>
+                  <label>Network adapter<select name="interface" required></select></label>
+                  <label>Connection type<select name="mode" required></select></label>
                 </div>
                 <label id="network-radio" hidden>Wi-Fi interface for the bridge<select name="wifi_interface" required disabled></select></label>
                 <div class="field-pair" id="network-station-options" hidden>
@@ -464,7 +497,7 @@ source .export-venv/bin/activate</code></pre></div>
                   <label id="network-password-field">Wi-Fi password<input name="password" type="password" required disabled autocomplete="new-password" aria-describedby="network-password-help"></label>
                 </div>
                 <p id="network-password-help" class="field-help" hidden>WPA2-Personal. Use 8–63 printable ASCII characters or a 64-digit hexadecimal key.</p>
-                <label>IPv4 assignment<select name="ipv4_method" required></select></label>
+                <label>IP address assignment<select name="ipv4_method" required></select></label>
                 <label id="network-address" hidden><span id="network-address-label">Pi IPv4 address / prefix</span><input name="address" placeholder="192.168.10.1/24" required disabled spellcheck="false" autocapitalize="off"></label>
                 <div class="field-pair" id="network-routes" hidden>
                   <label id="network-gateway">Gateway (optional)<input name="gateway" placeholder="192.168.10.254" disabled spellcheck="false"></label>
@@ -474,7 +507,7 @@ source .export-venv/bin/activate</code></pre></div>
                 <div class="network-guidance"><h3>Reconnect after applying</h3><p id="network-reconnect" class="field-help"></p>
                   <a id="network-target" class="text-link mono" hidden></a></div>
               </fieldset>
-              <footer class="form-footer"><button id="network-apply" type="submit" class="button primary">Apply temporarily</button>
+              <footer class="form-footer"><button id="network-apply" type="submit" class="button primary">Apply for 2 minutes</button>
                 <span class="field-help">Reconnect and choose Keep settings within 120 seconds.</span></footer>
             </form>
           </details>

@@ -45,15 +45,20 @@ function receiverCommand(family, port) {
 function livePanel({api, act, notice, busy}) {
   let current = null;
   let browserHost = "";
+  const form = byId("live-form");
   const hostInput = byId("live-host");
   const portInput = byId("live-port");
   const fpsInput = byId("live-max-fps");
   const command = byId("receiver-command");
   function updateCommand() {
     const active = current?.enabled;
-    const family = receiverFamily(active ? current.host : hostInput.value.trim() || browserHost);
+    const custom = form.elements.receiver.value === "other";
+    const host = active ? current.host : custom ? hostInput.value.trim() : browserHost;
+    const family = !active && custom && !host ? null : receiverFamily(host);
     const port = active ? current.port : portInput.valueAsNumber;
-    const error = !family ? "Enter a valid IPv4 or IPv6 receiver address." : "";
+    const error = !family ? "Enter the receiving computer’s IPv4 or IPv6 address." : "";
+    byId("live-host-field").hidden = !custom;
+    hostInput.disabled = active || !custom;
     hostInput.setCustomValidity(error);
     const validPort = active || portInput.validity.valid;
     setText("receiver-command", error || (validPort ? receiverCommand(family, port) : "Enter a valid UDP port."));
@@ -62,11 +67,15 @@ function livePanel({api, act, notice, busy}) {
 
   hostInput.addEventListener("input", updateCommand);
   portInput.addEventListener("input", updateCommand);
-  byId("live-form").addEventListener("submit", event => {
+  for (const choice of form.elements.receiver) choice.addEventListener("change", updateCommand);
+  form.addEventListener("invalid", event => {
+    if (byId("live-transport").contains(event.target)) byId("live-transport").open = true;
+  }, true);
+  form.addEventListener("submit", event => {
     event.preventDefault();
     if (!current) return;
     const body = current.enabled ? {enabled: false} : {enabled: true, port: portInput.valueAsNumber};
-    if (body.enabled && hostInput.value.trim()) body.host = hostInput.value.trim();
+    if (body.enabled && form.elements.receiver.value === "other") body.host = hostInput.value.trim();
     if (body.enabled && fpsInput.value !== "") body.max_fps = fpsInput.valueAsNumber;
     act(() => api("live", body));
   });
@@ -87,8 +96,7 @@ function livePanel({api, act, notice, busy}) {
     const mode = cam.settings || snapshot.config.camera;
     const supportedSize = [mode.width, mode.height].every(n => n <= 2040 && n % 8 === 0);
     browserHost = snapshot.client_address || "";
-    hostInput.placeholder = browserHost || "Automatic";
-    hostInput.disabled = active;
+    setText("live-peer-address", browserHost);
     portInput.disabled = active;
     fpsInput.disabled = active;
     byId("live-receiver-fields").hidden = active;
@@ -155,7 +163,7 @@ function diskCard(disk) {
     const reason = disk.raw ? "Recording requires a mounted writable filesystem."
       : disk.read_only ? "Mounted read-only."
       : !disk.mountpoint ? "Mount this device to use it for recordings."
-      : "No allowed recording root on this mount.";
+      : "The controller has no recording folder configured on this drive.";
     card.append(element("p", reason, "field-help"));
   }
   return card;
@@ -172,6 +180,8 @@ function inventoryPanel({api, chooseDestination, busy}) {
       const path = choice.dataset.directory;
       choice.parentElement.hidden = path === managedPaths.nvme || path === managedPaths.usb;
       const active = path === snapshot?.config.storage.directory && !snapshot.storage?.error;
+      const label = active ? "Selected · " + choice.dataset.medium : "Use " + choice.dataset.medium;
+      if (choice.textContent !== label) choice.textContent = label;
       choice.disabled = !snapshot || active || busy() || snapshot.camera.recording || snapshot.recording_sources.length > 0;
     }
   }
@@ -186,8 +196,9 @@ function inventoryPanel({api, chooseDestination, busy}) {
         paths.add(path);
         const label = disk.system ? "system drive" : (disk.kind || "volume");
         const row = element("div", undefined, "destination-row");
-        const choice = button("Record to " + label, () => chooseDestination(path));
+        const choice = button("Use " + label, () => chooseDestination(path));
         choice.dataset.directory = path;
+        choice.dataset.medium = label;
         row.append(choice, element("span", path, "file-path"));
         choices.append(row);
       }
@@ -244,14 +255,17 @@ function bootPanel({api, act, notice, busy}) {
     profile.disabled = blocked || conflict;
     port.disabled = profile.disabled || !profile.value || profile.value === "auto";
     const selected = latest?.profiles?.find(item => item.id === profile.value);
+    const saved = latest?.managed && selected && selected.id === latest.profile?.id &&
+      (selected.id === "auto" || port.value === latest.profile.port);
     const directive = selected?.directives?.[port.value] || "";
     byId("boot-preview").hidden = !directive || conflict;
     setText("boot-directive", directive);
-    byId("boot-apply").disabled = blocked || conflict || stale || !profile.value || profile.selectedOptions[0]?.disabled;
+    byId("boot-apply").disabled = blocked || conflict || stale || saved || !profile.value || profile.selectedOptions[0]?.disabled;
+    setText("boot-apply", saved ? "Profile saved" : "Save for next boot");
     byId("boot-restore").disabled = blocked || !latest?.backup_available;
     byId("boot-reboot").disabled = blocked || activity;
     const issues = [...(latest?.conflicts || [])];
-    if (stale) issues.push("The boot file changed after you began editing. Reload before staging.");
+    if (stale) issues.push("The boot file changed after you began editing. Reload it before saving.");
     if (activity) issues.push("Stop all active recording sources before rebooting.");
     setText("boot-conflicts", issues.join(" "));
   }
@@ -291,8 +305,8 @@ function bootPanel({api, act, notice, busy}) {
     const current = configured ? configured.label + (connector ? " · " + connector.toUpperCase() : "") : "Unspecified";
     const sharedPort = data?.selection_required_port?.toUpperCase();
     setText("boot-current", sharedPort ? "Multiple overlays on " + sharedPort : current);
-    setText("boot-state", !data?.available ? "Unavailable" : data.pending_reboot ? "Reboot pending" : "No pending reboot");
-    const guidance = sharedPort ? "Choose one profile to replace the camera overlays on " + sharedPort + "." : data?.message;
+    setText("boot-state", !data?.available ? "Unavailable" : data.pending_reboot ? "Reboot to apply" : "No reboot needed");
+    const guidance = sharedPort ? "Choose one profile to replace the camera overlays on " + sharedPort + "." : !data?.available ? data?.message : "";
     const message = [data?.simulated ? "Simulated boot configuration." : "", guidance].filter(Boolean).join(" ");
     setText("boot-message", message);
     setText("boot-path", data?.path || "");
@@ -334,7 +348,7 @@ function bootPanel({api, act, notice, busy}) {
   form.addEventListener("submit", event => {
     event.preventDefault();
     if (byId("boot-apply").disabled) return;
-    act(() => stage(profile.value), "Camera boot profile staged.");
+    act(() => stage(profile.value), "Profile saved. Reboot the Pi to load it.");
   });
   byId("boot-restore").addEventListener("click", () => {
     if (!window.confirm("Restore the saved boot configuration backup? It will replace the current boot file.")) return;
@@ -364,9 +378,9 @@ export function setupDevicePanels(options) {
   const boot = bootPanel(options);
   const storage = setupStoragePanels(options, inventory);
   return {
-    open(page) {
-      storage.open(page);
-      if (page === "camera") boot.load();
+    open(page, sessionId) {
+      storage.open(page, sessionId);
+      if (page === "camera" && !byId("camera-profile-view").hidden) boot.load();
     },
     update(snapshot, capabilities) {
       live(snapshot, capabilities);
@@ -378,9 +392,8 @@ export function setupDevicePanels(options) {
       boot.clear();
       inventory.clear();
       storage.clear();
-      byId("live-host").value = "";
-      byId("live-port").value = "5004";
-      byId("live-max-fps").value = "";
+      byId("live-form").reset();
+      byId("live-transport").open = false;
     },
   };
 }

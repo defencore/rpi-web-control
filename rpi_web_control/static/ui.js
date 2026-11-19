@@ -1,5 +1,7 @@
 export const byId = id => document.getElementById(id);
 
+export const isRecordingId = value => typeof value === "string" && /^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}$/.test(value);
+
 export function setText(id, value) {
   const node = byId(id);
   if (node.textContent !== String(value)) node.textContent = value;
@@ -52,5 +54,5 @@ export function destinationLabel(paths) {
     const root = paths[medium];
     if (root && (paths.current === root || paths.current.startsWith(root + "/"))) return label;
   }
-  return paths.current === paths.default ? "Default recording directory" : "Custom directory";
+  return paths.current === paths.default ? "Default recording folder" : "Custom folder";
 }

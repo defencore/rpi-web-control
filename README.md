@@ -31,19 +31,21 @@ From the same checkout, `make check` runs the tests, `make deb` creates the arm6
 
 ## Operating the camera
 
-Before starting a clip, open **Monitor → Recording destination** and check the drive, directory and free space. Choose **Start recording** in the page header. During the clip, Monitor shows the video data written, its average rate and an estimated time left based on free space. Use **Stop recording** for a manual-only clip or **Stop & pause triggers** when a rule holds the recording. Choose **Browse recordings** to find the finished clip. Return trigger inputs to rest before choosing **Resume triggers**. On smaller screens, open **Menu** to switch pages.
+On **Capture monitor**, **Recording setup** shows the selected video mode, destination and trigger rules. Select a row to change it. **Start preview** lets you frame the shot. **Start recording** in the page header starts saving video to the selected drive. During recording, the monitor shows the video size, average rate and estimated time left.
+
+Use **Stop recording** for a manual clip, or **Stop & pause triggers** when a rule holds the recording. Choose **View recording** to open that clip by its ID and download it. Return held inputs to rest before choosing **Resume triggers**. On a phone, open **Menu** to switch between capture tasks and configuration.
 
 The console compares the Pi's clock with the clock on the device running the browser. If the clocks differ by more than five seconds after allowing for request latency, a warning appears on any page. Check your computer or phone's time and stop any active recording. Selecting **Set Pi time** immediately copies the browser device's time to the Pi. This works over a local connection with no internet access.
 
 | Console page | Controls |
 | --- | --- |
-| Monitor | Watch the browser preview, check measured capture FPS and see which sources are holding the current recording. |
-| Recordings | Browse completed sessions, download a ZIP with video and timestamps or choose an individual file. Delete a session or clean completed recordings on a managed external drive. |
-| Stream | Choose a receiver IP, UDP port and optional stream FPS limit. Copy the GStreamer playback command and compare capture rate, sender rate and drop counters. |
-| Camera | Run a capture test for one or all advertised sensor modes, compare measured FPS, and set output size, bit depth, FPS and OSD. Choose or restore a sensor boot profile and request a reboot. [Supported modules and vendor profiles](docs/firmware.md#built-in-camera-profiles) |
-| Storage | See the active recording directory and choose **Record to USB** or **Record to NVMe** for a ready drive. Expand disk setup to mount or prepare a drive. |
-| Triggers | Set up a GPIO button to record while held or to start and stop on successive presses. A second GPIO or serial command can also stop a clip. Timer, numeric sensor and UART rules are available. [GPIO17 pushbutton setup and wiring](docs/triggers.md#set-up-a-momentary-button-on-gpio17) |
-| Network | Scan nearby Wi-Fi networks and connect the Pi to a router while keeping a fixed Ethernet address. The Pi can also host or bridge an access point. Direct-cable recovery uses `192.168.55.100` by default. [Join Wi-Fi](docs/network.md#join-an-existing-wi-fi-network) · [Host an access point](docs/network.md#create-a-wi-fi-access-point) |
+| Capture monitor | Watch the browser preview, check measured capture FPS and see which sources are holding the current recording. |
+| Recordings | Find a completed session by ID, date or format, download a ZIP with video and timestamps or choose an individual file. Delete a session or clean completed recordings on a managed external drive. |
+| Network stream | Choose a receiver IP, UDP port and optional stream FPS limit. Copy the GStreamer playback command and compare capture rate, sender rate and drop counters. |
+| Camera settings | Run a capture test for one or all advertised sensor modes, compare measured FPS, and set output size, bit depth, FPS and OSD. Choose or restore a sensor boot profile and request a reboot. [Supported modules and vendor profiles](docs/firmware.md#built-in-camera-profiles) |
+| Recording drives | See the active recording directory and choose **Use USB** or **Use NVMe** for a ready drive. Expand disk setup to mount or prepare a drive. |
+| Recording triggers | Set up a GPIO button to record while held or to start and stop on successive presses. A second GPIO or serial command can also stop a clip. Timer, numeric sensor and UART rules are available. [GPIO17 pushbutton setup and wiring](docs/triggers.md#set-up-a-momentary-button-on-gpio17) |
+| Network settings | Scan nearby Wi-Fi networks and connect the Pi to a router while keeping a fixed Ethernet address. The Pi can also host or bridge an access point. Direct-cable recovery uses `192.168.55.100` by default. [Join Wi-Fi](docs/network.md#join-an-existing-wi-fi-network) · [Host an access point](docs/network.md#create-a-wi-fi-access-point) |
 
 The frame rate setting applies to capture. Browser preview shares the latest JPEG among subscribers, at up to eight updates per second. Closing the preview or losing a browser connection leaves an active recording running. The last manual or trigger release closes the clip. A capture failure ends the affected session. While a previously active source still requests recording, the service attempts to reopen a new session with backoff. Changing camera settings or storage during an active recording returns a conflict.
 
@@ -52,16 +54,16 @@ The frame rate setting applies to capture. Browser preview shares the latest JPE
 | Up to 60 fps | Motion JPEG in `video.mjpeg` | Color | Optional, recorded in the pixels |
 | Above 60 fps, including 240 | Planar 8-bit YUV420 in `video.y4m` | Reduced-size grayscale | Bypassed |
 
-When planning a high-speed recording, open **Camera → Capture settings** and edit the output dimensions and target FPS. Above 60 fps, **Estimated write rate** and **Space per minute** update before you save. At 640 × 480 and 240 fps, video alone needs about 111 MB/s or 6.64 GB per minute. Allow extra space for the frame index and headers. At 60 fps and below, JPEG size varies with the scene. Record a sample on the chosen drive to measure its space use. For sustained high-speed recording, test long enough for the drive’s write cache to fill. [Hardware acceptance procedure](docs/hardware-validation.md#capture-and-playback)
+When planning a high-speed recording, open **Camera settings → Video settings** and edit the output dimensions and target FPS. Above 60 fps, **Estimated write rate** and **Space per minute** update before you save. At 640 × 480 and 240 fps, video alone needs about 111 MB/s or 6.64 GB per minute. Allow extra space for the frame index and headers. At 60 fps and below, JPEG size varies with the scene. Record a sample on the chosen drive to measure its space use. For sustained high-speed recording, test long enough for the drive’s write cache to fill. [Hardware acceptance procedure](docs/hardware-validation.md#capture-and-playback)
 
 Selecting a detected mode sets its sensor bit depth, dimensions and maximum frame rate. For 720p240 on the IMX577, select the 1280 × 720 entry at the desired depth, set the rate to 240 and save. In the API, `camera.sensor_bit_depth` accepts a reported depth or `0` for automatic selection. The active mode appears in camera status and the recording manifest. The depth describes the sensor readout. High-speed YUV420 files use eight bits per component for either sensor depth.
 
-To measure what the attached sensor delivers, stop preview, streaming and recording, then open **Camera → Test sensor modes**. Select a single mode or **All detected modes** and choose **Run test**. Compare the requested and measured FPS for each resolution and bit depth. [Camera test procedure](docs/hardware-validation.md#measure-every-advertised-sensor-mode)
+To measure what the attached sensor delivers, stop preview, streaming and recording, then open **Camera settings → Sensor tests**. Select a single mode or **All detected modes** and choose **Run sensor test**. Compare the requested and measured FPS for each resolution and bit depth. [Camera test procedure](docs/hardware-validation.md#measure-every-advertised-sensor-mode)
 
 ## Receive live video on a PC
 
 1. Connect the receiving PC and Pi over Ethernet or Wi-Fi. Open `https://<device-hostname>.local:8080` on the PC or another device such as a phone. Verify the certificate and, if prompted, sign in with the device token. See the [access and credential instructions](docs/package.md).
-2. In **Camera**, choose the desired resolution and FPS. Open **Stream**. Leave **Receiver IP** empty to send video to the device that starts the stream, or enter the receiving PC’s IP address. Set **Receiver UDP port** (default `5004`). For a 60 fps view of a 240 fps recording, set **Stream FPS limit** to `60`. Leave it empty to send at the camera rate.
+2. In **Camera settings → Video settings**, choose the resolution and FPS. In **Network stream → Play video on**, choose **This device** to send video to the computer running the browser. If you control the Pi from a phone, choose **Another computer** and enter the receiver’s IP. Open **Port and frame rate** to change the default UDP port (`5004`) or limit the stream FPS while recording at the full camera rate.
 3. Choose **Copy receiver command** and run it in a terminal on the receiving PC. Select **Start live stream** in the console. The video opens in a player window on that PC when frames arrive. Closing the browser leaves the sender running. Use **Stop live stream** when finished.
 
 The high-speed stream and recording can run together. The live sender uses individually coded JPEG frames, a bounded queue and nonblocking datagrams. End-to-end latency includes exposure, transport, decoding and display. A zero-buffer receiver setting cannot reduce all of these times to zero. On an unreliable link, unreceived UDP packets can cost a full frame. See the [receiver setup and latency measurement guide](docs/live.md).
@@ -80,7 +82,7 @@ python3 skills/rpi-capture-development/scripts/check_recording.py /path/to/sessi
 
 ## Convert a downloaded recording to MP4
 
-On **Recordings**, select **Download recording (.zip)** for the session. The ZIP contains the original video, frame timestamps and manifest. On the computer running the converter, install FFmpeg with ffprobe and activate your Python 3.11+ environment. Install Pillow once in that environment, then pass the downloaded ZIP to the converter.
+On **Recordings**, select **Download ZIP** for the session. The ZIP contains the original video, frame timestamps and manifest. On the computer running the converter, install FFmpeg with ffprobe and activate your Python 3.11+ environment. Install Pillow once in that environment, then pass the downloaded ZIP to the converter.
 
 ```sh
 python3 -m pip install Pillow
@@ -109,7 +111,7 @@ The API accepts requests without a token by default. When token protection is en
 | POST /api/camera/mode-test | Start a capture test with `{"action":"start"}`. Add `"mode":{"width":1280,"height":720,"bit_depth":8}` to select one advertised sensor mode. Poll `camera.mode_test` in `GET /api/status` for progress and results. Stop testing with `{"action":"cancel"}`. |
 | GET /api/storage | Attached media, filesystems, capacity and usable recording roots |
 | GET or POST /api/nvme, /api/usb | Inspect PCIe NVMe or USB drives and their current revisions. Mount an eligible ext4 volume or confirm erasure and prepare a dedicated recording disk. |
-| GET /api/recordings | List completed sessions from the active destination (`source=current`, the default), the first configured recording root (`source=default`), managed NVMe (`source=nvme`) or managed USB (`source=usb`). Follow the returned pagination cursor and target ID. |
+| GET /api/recordings | List completed sessions from the active destination (`source=current`, the default), the first configured recording root (`source=default`), managed NVMe (`source=nvme`) or managed USB (`source=usb`). Follow the returned cursor and target ID for more results. To look up a single recording in that folder, pass its full ID as `session` and omit the cursor. |
 | GET or HEAD /api/recordings/{session}/archive.zip | Follow the listing's `archive.url` to download the complete session as `{session}.zip`. An interrupted download restarts at the beginning. |
 | GET or HEAD /api/recordings/{session}/{filename} | Use the file URL from the session listing to download original video, frame timestamps or the manifest. Supports single byte ranges. |
 | POST /api/recordings/cleanup | Use `action=plan` with the listing's source and target ID. Supply a session for one recording or omit it for all eligible sessions directly in the directory. `action=delete` requires the matching revision and typed confirmation from the review. |

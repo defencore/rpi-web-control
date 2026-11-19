@@ -4,7 +4,7 @@ The desktop exporter reads a session ZIP or a completed session directory and cr
 
 ## Download the session
 
-Stop all recording sources for the clip, open **Recordings**, and choose **Download recording (.zip)** on that session. The archive contains three files at its top level. `session.json` describes the camera mode and clocks. `frames.csv` identifies each saved frame, its byte range and its timestamps in nanoseconds. The original pixels are in `video.mjpeg` or `video.y4m`.
+Stop all recording sources for the clip, open **Recordings**, and choose **Download ZIP** on that session. The archive contains three files at its top level. `session.json` describes the camera mode and clocks. `frames.csv` identifies each saved frame, its byte range and its timestamps in nanoseconds. The original pixels are in `video.mjpeg` or `video.y4m`.
 
 The ZIP can be passed directly to the exporter. If you already have the three files in a directory, pass that directory instead. Open **Files and actions** on a recording to download individual files with resume support. [Recording sources and downloads](storage.md)
 

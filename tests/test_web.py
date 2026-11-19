@@ -372,6 +372,8 @@ class WebTests(unittest.TestCase):
         self.assertEqual(json.load(self.request("/api/recordings"))["sessions"], [])
         deadline = time.monotonic() + 3
         directory = Path(self.app.camera.status()["session"])
+        lookup = f"/api/recordings?source=nvme&session={directory.name}"
+        self.assertEqual(json.load(self.request(lookup))["sessions"], [])
         while self.app.camera.status()["frames"] < 2 and time.monotonic() < deadline:
             time.sleep(.01)
         self.assertEqual(self.request("/api/recording", {"enabled": False}).status, 200)
@@ -381,6 +383,7 @@ class WebTests(unittest.TestCase):
         self.assertEqual(self.request(current_url).status, 409)
         page = json.load(self.request("/api/recordings?source=nvme"))
         row, = page["sessions"]
+        self.assertEqual(json.load(self.request(lookup + "&target_id=" + page["target_id"])), page)
         self.assertEqual(row["name"], directory.name)
         archive = row["archive"]
         self.assertEqual(archive["name"], directory.name + ".zip")
@@ -417,7 +420,8 @@ class WebTests(unittest.TestCase):
         stale_target = clip["url"].replace(page["target_id"], "0" * 64)
         self.assertEqual(self.request(stale_target).status, 409)
         for path in ("/api/recordings?source=foo", "/api/recordings?directory=/etc",
-                     "/api/recordings?cursor=one&cursor=two"):
+                     "/api/recordings?cursor=one&cursor=two", "/api/recordings?session=invalid",
+                     lookup + "&cursor=" + directory.name):
             self.assertEqual(self.request(path).status, 400)
         for path in ("/api/recordings/../session.json", "/api/recordings/%2Fetc/frames.csv",
                      f"/api/recordings/{row['name']}/something-else"):

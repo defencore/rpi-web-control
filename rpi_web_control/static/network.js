@@ -1,8 +1,8 @@
-import {byId, element, fact, setText} from "./ui.js";
+import {byId, button, element, fact, setText} from "./ui.js";
 import {setupStation, validateWifiFields} from "./wifi_station.js";
 
-const modes = {ethernet: "Ethernet", station: "Wi-Fi station", ap: "Wi-Fi access point", bridge: "Ethernet + Wi-Fi bridge"};
-const methods = {auto: "DHCP client", manual: "Static address", shared: "Local DHCP server"};
+const modes = {ethernet: "Ethernet", station: "Join a Wi-Fi network", ap: "Host a Wi-Fi hotspot", bridge: "Bridge Ethernet and Wi-Fi"};
+const methods = {auto: "Get an address automatically (DHCP)", manual: "Use a fixed address", shared: "Assign addresses to clients (DHCP server)"};
 const types = {ethernet: "Ethernet", wifi: "Wi-Fi", bridge: "Bridge"};
 const recoveryStates = {
   active: ["Active", "The Pi has an additional console address on the wired connection."],
@@ -65,13 +65,17 @@ function suggestedApAddress(interfaces, selected, recovery) {
   return ""; // NetworkManager can select another shared subnet on activation.
 }
 
+function primaryHost(adapter, recovery) {
+  const addresses = (adapter?.addresses || []).filter(address =>
+    !(recovery?.state === "active" && adapter.name === recovery.interface &&
+      address === recovery.address?.split("/")[0] + "/32"));
+  const primary = addresses.includes(adapter?.configured_primary) ? adapter.configured_primary : addresses[0];
+  return targetNetwork(primary || "")?.host;
+}
+
 function activeAccessPoint(adapter, devices, recovery) {
   const owner = adapter.controller ? devices.find(row => row.name === adapter.controller) : adapter;
-  const addresses = (owner?.addresses || []).filter(address =>
-    !(recovery?.state === "active" && owner.name === recovery.interface &&
-      address.split("/")[0] === recovery.address?.split("/")[0]));
-  const primary = addresses.includes(owner?.configured_primary) ? owner.configured_primary : addresses[0];
-  const host = targetNetwork(primary || "")?.host;
+  const host = primaryHost(owner, recovery);
   const group = element("div", undefined, "network-guidance");
   group.append(element("h3", adapter.ssid || adapter.name));
   group.append(element("p", host
@@ -142,12 +146,12 @@ function adapterCard(adapter, recovery) {
       ? address + " (wired recovery)" : address);
   const entries = [
     ["Controller", adapter.controller],
-    ["Wi-Fi", [modes[adapter.mode], adapter.ssid].filter(Boolean).join(" · ")],
+    ["Wi-Fi network", adapter.ssid],
     ["IPv4", addresses.join(", ")],
     ["Assignment", methods[adapter.ipv4_method]],
     ["Gateway", adapter.gateway],
     ["DNS", (adapter.dns || []).join(", ")],
-  ].filter(([name, value]) => value && (name !== "Wi-Fi" || adapter.type === "wifi"));
+  ].filter(([, value]) => value);
   if (entries.length) {
     const facts = element("dl", undefined, "fact-grid");
     facts.append(...entries.map(([name, value]) => fact(name, value)));
@@ -180,9 +184,40 @@ export function setupNetworkPanel({api, act, notice, busy}) {
     return interfaceChoices().filter(row => row.type === "wifi" && row.ap && !row.controller);
   }
 
+  function showConsoleAddresses(status) {
+    const rows = [];
+    for (const adapter of devices) {
+      if (adapter.controller || adapter.state !== "connected" || !Object.hasOwn(types, adapter.type)) continue;
+      const host = primaryHost(adapter, recovery);
+      if (!host) continue;
+      const row = element("div", undefined, "console-connection");
+      const address = element("div");
+      const role = adapter.mode === "ap" ? "Wi-Fi hotspot" : types[adapter.type];
+      address.append(element("h3", role + " · " + (adapter.ssid || adapter.name)));
+      const link = element("a", consoleUrl(host), "text-link mono");
+      link.href = consoleUrl(host);
+      address.append(link);
+      row.append(address);
+      if (adapter.type === "ethernet" && status.available && !pending && interfaceChoices().includes(adapter)) {
+        row.append(button("Edit Ethernet settings", () => {
+          if (busy() || pending) return;
+          if (fields.interface.value !== adapter.name || fields.mode.value !== "ethernet") {
+            fields.interface.value = adapter.name;
+            editOptions(true);
+          }
+          connectionTask.open = true;
+          fields.ipv4_method.focus();
+        }));
+      }
+      rows.push(row);
+    }
+    byId("network-address-list").replaceChildren(...(rows.length ? rows :
+      [element("p", "No connected adapter has reported a primary IPv4 address.", "field-help")]));
+  }
+
   function updateApAction() {
     const selected = devices.find(row => row.name === apInterface.value);
-    setText("network-setup-ap", selected?.mode === "ap" ? "Edit access point" : "Set up access point");
+    setText("network-setup-ap", selected?.mode === "ap" ? "Edit hotspot" : "Set up hotspot");
   }
 
   function wifiControls(status) {
@@ -208,7 +243,7 @@ export function setupNetworkPanel({api, act, notice, busy}) {
     if (!radios.length) message = !status.available && !devices.length && status.message
       ? status.message : "No Wi-Fi adapter detected. Connect an AP-capable USB Wi-Fi adapter or use a Pi with onboard Wi-Fi.";
     else if (hardwareOff) message = "Wi-Fi is blocked at the hardware level. Check the adapter and its hardware radio switch.";
-    else if (softwareOff) message = "Wi-Fi is switched off. Enable Wi-Fi to set up an access point.";
+    else if (softwareOff) message = "Wi-Fi is switched off. Enable Wi-Fi to set up a hotspot.";
     else if (accessPoints.length) message = "";
     else if (!setup.hidden) message = "Create a password-protected Wi-Fi network for direct access to the Pi.";
     else if (radios.every(row => !row.managed || row.state === "unmanaged"))
@@ -216,8 +251,8 @@ export function setupNetworkPanel({api, act, notice, busy}) {
     else if (radios.some(row => row.state === "unavailable" || row.state === "unknown"))
       message = "The Wi-Fi adapter is unavailable. Check the Wi-Fi country setting and adapter firmware on the Pi.";
     else if (radios.some(row => row.ap && row.controller))
-      message = "The Wi-Fi adapter belongs to a network controller. Use the bridge settings for its access point.";
-    else message = "No available Wi-Fi adapter reports access point support.";
+      message = "The Wi-Fi adapter belongs to a network controller. Use the bridge settings for its hotspot.";
+    else message = "No available Wi-Fi adapter supports hotspot mode.";
     setText("network-wifi-message", message);
     updateApAction();
   }
@@ -243,7 +278,7 @@ export function setupNetworkPanel({api, act, notice, busy}) {
     if (mode === "station") text = "Join the same Wi-Fi network as the Pi. " + text;
     if (mode === "ap" || mode === "bridge") {
       const name = fields.ssid.value;
-      const join = name ? "join “" + name + "”" : "join the Pi’s access point";
+      const join = name ? "join “" + name + "”" : "join the Pi’s hotspot";
       text = (mode === "bridge" ? "The Pi’s IPv4 settings will move to br-rpi. Use the Ethernet port or " + join + ". "
         : join[0].toUpperCase() + join.slice(1) + " using the Wi-Fi password. ") + text;
     }
@@ -304,20 +339,20 @@ export function setupNetworkPanel({api, act, notice, busy}) {
     byId("network-shared-help").hidden = method !== "shared";
     if (method === "shared") {
       setText("network-shared-help", mode === "ap" ? "The Pi will assign addresses to Wi-Fi clients." :
-        "The Pi will serve DHCP on the Ethernet LAN" + (bridge ? " and Wi-Fi access point" : "") +
+        "The Pi will serve DHCP on the Ethernet LAN" + (bridge ? " and Wi-Fi hotspot" : "") +
         ". Use an isolated network where this Pi is the only DHCP server.");
     }
     byId("network-fields").disabled = applying || Boolean(pending);
     byId("network-apply").disabled = applying || Boolean(pending) || !adapter || !allowedModes.includes(mode)
       || (bridge && !radios.some(item => item.name === fields.wifi_interface.value));
-    setText("network-apply", mode === "ap" ? "Start access point" : "Apply temporarily");
+    setText("network-apply", mode === "ap" ? "Start hotspot" : "Apply for 2 minutes");
     guidance();
     validate();
   }
 
   function countdown() {
     const seconds = Math.max(0, Math.ceil((deadline - performance.now()) / 1000));
-    setText("network-timer", seconds ? "Automatic rollback in about " + seconds + " s." : "Checking the result of automatic rollback…");
+    setText("network-timer", seconds ? seconds + " s left to keep these settings." : "Checking whether the previous settings were restored…");
     byId("network-confirm").disabled = byId("network-rollback").disabled = busy() || !seconds;
   }
 
@@ -338,9 +373,10 @@ export function setupNetworkPanel({api, act, notice, busy}) {
     devices = status.interfaces || [];
     recovery = status.recovery || null;
     showRecovery(recovery, devices);
-    const key = JSON.stringify([devices, recovery?.interface, recovery?.address, recovery?.state]);
+    const key = JSON.stringify([devices, recovery?.interface, recovery?.address, recovery?.state, status.available, Boolean(next)]);
     if (key !== inventoryKey) {
       inventoryKey = key;
+      showConsoleAddresses(status);
       byId("adapter-list").replaceChildren(...devices.map(adapter => adapterCard(adapter, recovery)));
       const aps = devices.filter(row => row.type === "wifi" && row.mode === "ap" && row.state === "connected");
       setText("network-ap-summary", aps.length ? "Hosting " + aps.map(row => row.ssid || row.name).join(", ")
@@ -428,7 +464,7 @@ export function setupNetworkPanel({api, act, notice, busy}) {
       applying = true;
       fields.password.value = "";
       editOptions();
-      notice("Applying network settings. Reconnect using the instructions on the Network page.");
+      notice("Applying network settings. Follow the reconnection instructions in Network settings.");
       try {
         update(await api("network", data));
         notice();

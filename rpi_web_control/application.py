@@ -214,9 +214,10 @@ class Application:
                 raise ValueError("The open recording directory does not match the verified external device.")
         return medium, disk
 
-    def recordings(self, cursor=None, *, source="current", target_id=None):
+    def recordings(self, cursor=None, *, source="current", target_id=None, session=None):
         directory, identity = self._download_target(source)
-        result = list_recordings(self.storage, directory, identity, cursor, source=source, target_id=target_id)
+        result = list_recordings(self.storage, directory, identity, cursor, source=source,
+                                 target_id=target_id, session=session)
         result["cleanup_allowed"] = False
         if self._medium(directory):
             try:

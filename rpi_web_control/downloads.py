@@ -83,29 +83,37 @@ def _session(storage, target, name):
         yield meta, files, fd
 
 
-def list_recordings(storage, directory, identity, cursor=None, *, source="current", target_id=None):
+def _page_names(target, cursor):
+    # Open each candidate separately so a damaged entry cannot block the rest of the page.
+    try:
+        with os.scandir(target.fd) as entries:
+            return heapq.nlargest(_PAGE_SIZE + 1, (
+                entry.name for entry in entries if _SESSION.fullmatch(entry.name)
+                and (cursor is None or entry.name < cursor)
+            ))
+    except OSError as exc:
+        if exc.errno in (errno.EIO, errno.EROFS):
+            raise OSError(f"Could not read the recording directory {target.path} ({exc}). "
+                          "Check the drive on the Recording drives page.") from exc
+        raise
+
+
+def list_recordings(storage, directory, identity, cursor=None, *, source="current", target_id=None, session=None):
     if source not in ("current", "nvme", "default", "usb"):
         raise ValueError("Unknown recording source.")
     if cursor is not None and not _SESSION.fullmatch(cursor):
         raise ValueError("Invalid recording page cursor.")
+    if session is not None:
+        if cursor is not None:
+            raise ValueError("Choose a recording ID or a page cursor.")
+        if not _SESSION.fullmatch(session):
+            raise ValueError("Invalid recording ID.")
     rows = []
     unreadable = []
     with storage.open_target(directory, identity, create=False) as target:
         identifier = _target_id(target, target_id)
         suffix = f"?source={source}&target_id={identifier}"
-        # Read names first. Opening each candidate below checks the directory type
-        # and lets a damaged entry fail independently of the rest of the page.
-        try:
-            with os.scandir(target.fd) as entries:
-                names = heapq.nlargest(_PAGE_SIZE + 1, (
-                    entry.name for entry in entries if _SESSION.fullmatch(entry.name)
-                    and (cursor is None or entry.name < cursor)
-                ))
-        except OSError as exc:
-            if exc.errno in (errno.EIO, errno.EROFS):
-                raise OSError(f"Could not read the recording directory {target.path} ({exc}). "
-                              "Check the recording drive in Storage.") from exc
-            raise
+        names = [session] if session is not None else _page_names(target, cursor)
         for name in names[:_PAGE_SIZE]:
             try:
                 with _session(storage, target, name) as (meta, files, _):

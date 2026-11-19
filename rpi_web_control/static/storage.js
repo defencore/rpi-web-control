@@ -1,4 +1,4 @@
-import {byId, setText, element, button, capacity, destinationLabel, fact, copyCommand} from "./ui.js";
+import {byId, setText, element, button, capacity, destinationLabel, fact, copyCommand, isRecordingId} from "./ui.js";
 
 function cleanupDialog({api, act, busy, notice}, reload) {
   const dialog = byId("cleanup-dialog");
@@ -35,7 +35,7 @@ function cleanupDialog({api, act, busy, notice}, reload) {
     input.value = "";
     byId("cleanup-details").hidden = true;
     setText("cleanup-summary", "");
-    setText("cleanup-title", selector.session ? "Delete this recording?" : "Clean this recording directory?");
+    setText("cleanup-title", selector.session ? "Delete this recording?" : "Delete all eligible recordings in this folder?");
     explain("Checking the drive and its recordings…");
     dialog.showModal();
     try {
@@ -47,7 +47,7 @@ function cleanupDialog({api, act, busy, notice}, reload) {
       }
       setText("cleanup-target", (plan.medium === "usb" ? "USB" : "NVMe") + " · " + plan.device);
       setText("cleanup-directory", plan.directory);
-      setText("cleanup-scope", selector.session || "All eligible completed recordings in this directory");
+      setText("cleanup-scope", selector.session || "All eligible completed recordings in this folder");
       byId("cleanup-details").hidden = false;
       const count = plan.count.toLocaleString("en-US") + (plan.count === 1 ? " recording" : " recordings");
       const size = capacity(plan.bytes) + " (" + plan.bytes.toLocaleString("en-US") + " bytes)";
@@ -59,7 +59,7 @@ function cleanupDialog({api, act, busy, notice}, reload) {
       reviewed = {...selector, revision: plan.revision, confirmation: plan.confirmation};
       setText("cleanup-message", "Deletion is permanent.");
       setText("cleanup-challenge", "Type " + plan.confirmation + " to confirm");
-      submit.textContent = selector.session ? "Delete recording" : "Clean recordings";
+      submit.textContent = selector.session ? "Delete recording" : "Delete " + count;
       form.hidden = false;
       controls();
     } catch (error) {
@@ -106,32 +106,36 @@ function recordingsPanel(options, isVisible) {
   let directories = null;
   let session = null;
   let recording = false;
-  let cursor = null;
-  let targetId = null;
-  let cleanupAllowed = false;
   let recordingHeld = false;
-  let ticket = 0;
-  const list = byId("clips-list");
+  function catalog(id) {
+    return {list: byId(id), ticket: 0, loaded: false, loading: false, failed: false, message: "",
+      cursor: null, targetId: null, cleanupAllowed: false};
+  }
+  const folder = catalog("clips-list");
+  const lookup = catalog("clips-exact-list");
+  const filter = byId("clips-filter");
+  let exactId = "";
+  let view = folder;
   const more = byId("clips-more");
   const source = byId("clips-source");
   const clean = byId("clips-clean");
-  const cleanup = cleanupDialog(options, () => load());
+  const cleanup = cleanupDialog(options, reloadFolder);
 
   function deletionControls() {
     const section = byId("clips-cleanup");
-    section.hidden = !cleanupAllowed;
-    if (!cleanupAllowed) section.open = false;
+    section.hidden = !view.cleanupAllowed || Boolean(filter.value.trim());
+    if (section.hidden) section.open = false;
     setText("clips-delete-lock", recordingHeld ? "Stop all recording sources before deleting recordings." : "");
-    for (const control of [clean, ...list.querySelectorAll(".clip-delete")]) {
-      control.hidden = !cleanupAllowed;
-      control.disabled = !cleanupAllowed || !targetId || recordingHeld || busy();
+    for (const control of [clean, ...view.list.querySelectorAll(".clip-delete")]) {
+      control.hidden = !view.cleanupAllowed;
+      control.disabled = !view.cleanupAllowed || !view.targetId || recordingHeld || busy();
       control.title = recordingHeld ? "Stop all recording sources before deleting recordings." : "";
     }
   }
 
   function review(sessionName) {
-    if (!cleanupAllowed || !targetId || recordingHeld || !isVisible()) return;
-    const selector = {source: source.value, target_id: targetId};
+    if (!view.cleanupAllowed || !view.targetId || recordingHeld || !isVisible() || (!sessionName && filter.value.trim())) return;
+    const selector = {source: source.value, target_id: view.targetId};
     if (sessionName) selector.session = sessionName;
     cleanup.review(selector);
   }
@@ -152,9 +156,14 @@ function recordingsPanel(options, isVisible) {
     const date = new Date(session.started_at);
     const header = element("div", undefined, "clip-heading");
     const info = element("div");
-    const title = Number.isNaN(date.getTime()) ? session.name : date.toLocaleString("en-US", {dateStyle: "medium", timeStyle: "long"});
+    const title = Number.isNaN(date.getTime()) ? "Start time unavailable" : date.toLocaleString("en-US", {dateStyle: "medium", timeStyle: "long"});
     info.append(element("h3", title));
+    info.append(element("p", "Recording ID · " + session.name, "clip-id"));
     const summary = [];
+    const format = session.files.some(file => file.name === "video.mjpeg") ? "Motion JPEG (MJPEG)"
+      : session.files.some(file => file.name === "video.y4m") ? "YUV420 (Y4M)" : "";
+    if (format) summary.push(format);
+    row.dataset.search = [session.name, session.started_at, title, format, date.toLocaleDateString("en-CA")].join(" ").toLowerCase();
     if (Number.isSafeInteger(session.frames)) summary.push(session.frames.toLocaleString("en-US") + " frames");
     if (session.files.length && session.files.every(file => Number.isSafeInteger(file.size_bytes))) {
       summary.push(capacity(session.files.reduce((total, file) => total + file.size_bytes, 0)));
@@ -164,8 +173,8 @@ function recordingsPanel(options, isVisible) {
     row.append(header);
     const archive = downloadLink(session.archive, "button primary small clip-archive");
     if (archive) {
-      archive.textContent = "Download recording (.zip)";
-      archive.setAttribute("aria-label", "Download recording (.zip) for " + session.name);
+      archive.textContent = "Download ZIP";
+      archive.setAttribute("aria-label", "Download ZIP for " + session.name);
       header.append(archive);
     }
     const links = element("div", undefined, "clip-links");
@@ -177,7 +186,7 @@ function recordingsPanel(options, isVisible) {
       links.append(link);
     }
     const details = element("details", undefined, "clip-details");
-    details.append(element("summary", "Files and actions"), element("p", session.name, "clip-id"), links);
+    details.append(element("summary", "Files and actions"), links);
     details.open = !archive;
     const remove = button("Delete recording…", () => review(session.name), "button secondary small danger clip-delete");
     remove.setAttribute("aria-label", "Delete recording " + session.name);
@@ -186,72 +195,148 @@ function recordingsPanel(options, isVisible) {
     return row;
   }
 
-  async function load(append = false) {
-    if (!directories || !isVisible() || (append && !cursor)) return;
-    const request = ++ticket;
-    const query = new URLSearchParams({source: source.value});
-    byId("clips-in-progress").hidden = !recording || directories[source.value] !== directories.current;
-    if (append) {
-      query.set("cursor", cursor);
-      query.set("target_id", targetId);
+  function reset(catalog) {
+    catalog.ticket++;
+    catalog.list.replaceChildren();
+    catalog.loaded = catalog.loading = catalog.failed = catalog.cleanupAllowed = false;
+    catalog.targetId = catalog.cursor = null;
+    catalog.message = "";
+  }
+
+  function displayResults() {
+    folder.list.hidden = view !== folder;
+    lookup.list.hidden = view !== lookup;
+    const query = filter.value.trim().toLowerCase();
+    const words = query.split(/\s+/);
+    const rows = view.list.querySelectorAll(".clip-row");
+    let matches = 0;
+    for (const row of rows) {
+      row.hidden = view === folder && !words.every(word => row.dataset.search.includes(word));
+      if (!row.hidden) matches++;
     }
-    byId("clips-refresh").disabled = more.disabled = true;
+    let count = "";
+    if (view.loaded) {
+      if (view === lookup) {
+        if (matches) count = "1 matching recording.";
+        else if (!view.list.querySelector(".danger")) count = "No completed recording with this ID in this folder. Try another folder.";
+      }
+      else if (query) count = matches + " of " + rows.length + " loaded recordings match." +
+        (view.cursor ? " Load older recordings to search more." : "");
+      else if (rows.length) count = rows.length + (rows.length === 1 ? " recording" : " recordings") + (view.cursor ? " loaded." : " in this folder.");
+      else count = view.cursor ? "No completed recordings on this page. Load older recordings to continue."
+        : view.list.querySelector(".danger") ? "No readable completed recordings in this folder." : "No completed recordings in this folder.";
+    }
+    setText("clips-count", count);
+    setText("clips-message", view.message || "");
+    byId("clips-message").classList.toggle("danger", Boolean(view.failed));
+    byId("clips-clear").hidden = !filter.value;
+    byId("clips-refresh").disabled = more.disabled = Boolean(view.loading);
+    more.hidden = !view.cursor;
+    deletionControls();
+  }
+
+  async function load(append = false) {
+    if (!directories || !isVisible() || (append && (!view.cursor || view.loading))) return;
+    const current = view;
     if (!append) {
       cleanup.dismiss();
-      cleanupAllowed = false;
-      deletionControls();
-      list.replaceChildren();
-      more.hidden = true;
-      targetId = cursor = null;
-      setText("clips-directory", directories[source.value] || "");
+      reset(current);
     }
-    byId("clips-message").classList.remove("danger");
-    setText("clips-message", "Loading recordings…");
+    const request = ++current.ticket;
+    const query = new URLSearchParams({source: source.value});
+    if (current === lookup) {
+      query.set("session", exactId);
+      if (folder.targetId) query.set("target_id", folder.targetId);
+    }
+    if (append) {
+      query.set("cursor", current.cursor);
+      query.set("target_id", current.targetId);
+    }
+    setText("clips-directory", directories[source.value] || "");
+    byId("clips-in-progress").hidden = !recording || directories[source.value] !== directories.current;
+    current.loading = true;
+    current.failed = false;
+    current.message = current === lookup ? "Looking up this recording…" : "Loading recordings…";
+    displayResults();
     try {
       const result = await api("recordings?" + query.toString());
-      if (request !== ticket) return;
-      setText("clips-directory", result.directory);
-      targetId = result.target_id;
-      cleanupAllowed = result.cleanup_allowed === true;
-      list.append(...result.sessions.map(recordingRow));
+      if (request !== current.ticket) return;
+      current.loaded = true;
+      current.targetId = result.target_id;
+      current.cleanupAllowed = result.cleanup_allowed === true;
+      current.list.append(...result.sessions.map(recordingRow));
       if (result.unreadable_sessions?.length) {
         const folders = result.unreadable_sessions.join(", ");
-        list.append(element("p", "The drive reported an I/O error reading " + folders +
-          ". Check the drive in Storage, then refresh this list.", "danger"));
+        current.list.append(element("p", "The drive reported an I/O error reading " + folders +
+          ". Check the drive in Recording drives, then refresh this list.", "danger"));
       }
-      deletionControls();
-      cursor = result.next_cursor;
-      more.hidden = !cursor;
-      setText("clips-message", list.childElementCount ? "" : cursor
-        ? "No completed recordings on this page. Load older recordings to continue."
-        : "No completed recordings in this directory.");
+      current.cursor = result.next_cursor;
+      current.message = "";
     } catch (error) {
-      if (request === ticket) {
-        byId("clips-message").classList.add("danger");
-        setText("clips-message", "Could not load recordings. " + error.message);
-      }
+      if (request !== current.ticket) return;
+      current.failed = true;
+      current.message = "Could not load recordings. " + error.message;
     } finally {
-      if (request === ticket) byId("clips-refresh").disabled = more.disabled = false;
+      if (request === current.ticket) {
+        current.loading = false;
+        if (current === view) displayResults();
+      }
     }
   }
 
-  byId("clips-refresh").addEventListener("click", () => load());
+  function applyFilter() {
+    const value = filter.value.trim();
+    const sessionId = isRecordingId(value) ? value : "";
+    if (sessionId !== exactId) {
+      cleanup.dismiss();
+      reset(lookup);
+      exactId = sessionId;
+      view = exactId ? lookup : folder;
+    }
+    if (!view.loaded && !view.loading) load();
+    displayResults();
+  }
+
+  function clearDeepLink() {
+    if (location.hash.startsWith("#recordings/")) history.replaceState(null, "", "#recordings");
+  }
+
+  function reloadFolder() {
+    reset(folder);
+    reset(lookup);
+    return load();
+  }
+
+  byId("clips-refresh").addEventListener("click", reloadFolder);
   clean.addEventListener("click", () => review());
   byId("copy-mp4-command").addEventListener("click", () => copyCommand(byId("mp4-command"), notice));
   for (const id of ["browse-active", "monitor-browse"]) {
     byId(id).addEventListener("click", () => { source.value = "current"; });
   }
-  source.addEventListener("change", () => load());
+  filter.addEventListener("input", () => { clearDeepLink(); applyFilter(); });
+  byId("clips-clear").addEventListener("click", () => {
+    filter.value = "";
+    clearDeepLink();
+    applyFilter();
+    filter.focus();
+  });
+  source.addEventListener("change", () => { clearDeepLink(); reloadFolder(); });
   more.addEventListener("click", () => load(true));
   return {
-    load, leave: cleanup.dismiss,
+    open(sessionId) {
+      if (sessionId) source.value = "current";
+      filter.value = exactId = sessionId || "";
+      view = exactId ? lookup : folder;
+      reloadFolder();
+    },
+    leave: cleanup.dismiss,
     update(snapshot) {
       const next = snapshot.recording_directories || {current: snapshot.config.storage.directory, nvme: null};
       const previous = source.value;
       const path = directories?.[previous];
       if (!directories || ["current", "nvme", "usb", "default"].some(key => next[key] !== directories[key])) {
         const names = {current: "Current destination · " + destinationLabel(next),
-          nvme: "PCIe NVMe recording directory", usb: "USB recording directory", default: "Default recording directory"};
+          nvme: "PCIe NVMe", usb: "USB drive", default: "Default recording folder"};
         const seen = new Set();
         const options = [];
         for (const key of ["current", "nvme", "usb", "default"]) {
@@ -269,26 +354,25 @@ function recordingsPanel(options, isVisible) {
       recordingHeld = held;
       deletionControls();
       const changed = !directories || previous !== source.value || path !== next[source.value] ||
-        (!camera.recording && (recording || session !== camera.session));
+        (next[source.value] === next.current && !camera.recording && (recording || session !== camera.session));
       directories = next;
       recording = camera.recording;
       session = camera.session;
       byId("clips-in-progress").hidden = !recording || next[source.value] !== next.current;
-      if (changed) load();
+      if (changed) reloadFolder();
     },
     clear() {
       cleanup.dismiss();
-      cleanupAllowed = recordingHeld = false;
-      deletionControls();
-      recording = false;
-      directories = cursor = targetId = session = null;
+      recordingHeld = recording = false;
+      directories = session = null;
       source.value = "current";
+      filter.value = exactId = "";
+      view = folder;
+      reset(folder);
+      reset(lookup);
       byId("clips-in-progress").hidden = true;
-      ticket++;
-      list.replaceChildren();
-      more.hidden = true;
       setText("clips-directory", "");
-      setText("clips-message", "");
+      displayResults();
     },
   };
 }
@@ -322,7 +406,7 @@ function drivePanel(medium, label, {api, act, busy, chooseDestination}, refreshP
     control("prepare").disabled = blocked || !disk?.can_prepare || confirmation.value !== disk.device;
     const selected = latest?.ready && healthyDirectory === latest.directory;
     control("use").disabled = blocked || !latest?.ready || selected;
-    write("use", selected ? label + " selected" : "Record to " + label);
+    write("use", selected ? label + " selected" : "Use " + label);
     write("activity", applying ? "Setting up the " + label + " disk…" : latest?.busy ? label + " setup is in progress."
       : recording ? "Finish the active recording before changing storage." : "");
   }
@@ -416,7 +500,7 @@ function drivePanel(medium, label, {api, act, busy, chooseDestination}, refreshP
         const result = await api(medium, body);
         if (request !== ticket) return;
         show(result);
-        write("result", result.ready ? target + " is ready. Choose Record to " + label + " to use it."
+        write("result", result.ready ? target + " is ready. Select it as the destination to save new recordings there."
           : result.error || "The " + label + " recording directory is unavailable.");
       } catch (error) {
         if (request !== ticket) return;
@@ -476,7 +560,6 @@ export function setupStoragePanels(options, inventory) {
   const refreshDrives = byId("refresh-drives");
 
   async function refreshPage() {
-    if (page === "recordings") return recordings.load();
     if (page === "storage") {
       refreshDrives.disabled = true;
       try { await Promise.all([...drives.map(drive => drive.load()), inventory.load()]); }
@@ -486,10 +569,11 @@ export function setupStoragePanels(options, inventory) {
 
   refreshDrives.addEventListener("click", refreshPage);
   return {
-    open(nextPage) {
+    open(nextPage, sessionId) {
       if (page === "recordings" && nextPage !== page) recordings.leave();
       page = nextPage;
-      refreshPage();
+      if (page === "recordings") recordings.open(sessionId);
+      else refreshPage();
     },
     update(snapshot) {
       const paths = snapshot.recording_directories || {current: snapshot.config.storage.directory};

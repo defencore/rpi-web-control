@@ -4,7 +4,7 @@ The package targets Raspberry Pi OS 64-bit Bookworm or newer on Raspberry Pi 5 a
 
 ## Build and inspect
 
-From the project root, run `make deb` and `make verify-deb`. The builder needs Python 3.11 or newer, Make, a POSIX shell and the standard `ar` tool. It writes `dist/rpi-web-control_0.10.0-2_arm64.deb`. The same sources, toolchain and `SOURCE_DATE_EPOCH` produce the same bytes. The default archive timestamp is zero. The builder verifies the control scripts, member order, payload hashes, file modes and ownership. Where installed, it also runs `dpkg-deb --info` and `dpkg-deb --contents`.
+From the project root, run `make deb` and `make verify-deb`. The builder needs Python 3.11 or newer, Make, a POSIX shell and the standard `ar` tool. It writes `dist/rpi-web-control_0.11.0-1_arm64.deb`. The same sources, toolchain and `SOURCE_DATE_EPOCH` produce the same bytes. The default archive timestamp is zero. The builder verifies the control scripts, member order, payload hashes, file modes and ownership. Where installed, it also runs `dpkg-deb --info` and `dpkg-deb --contents`.
 
 Download the desktop export utility from **Recordings → Convert to MP4**. It is also included in `/usr/share/doc/rpi-web-control/tools/render_recording.py` and in the project checkout. On the workstation it accepts a downloaded session ZIP or a completed recording directory. See the [desktop export guide](post-processing.md) for requirements and commands.
 
@@ -20,7 +20,7 @@ The script builds the release named in `packaging/control` if its arm64 archive 
 
 The script reuses one SSH connection and honors normal host key verification and SSH authentication. APT runs as root and keeps locally edited package configuration files. For a non-root login, run the installer from a terminal so sudo can prompt on the Pi. An unattended run needs working SSH authentication and noninteractive sudo access to the install command.
 
-The installer verifies the installed version and service state. A fresh install starts the service, and an upgrade restarts a running service. A previously installed, intentionally stopped service stays stopped. If the selected version is already installed, the installer checks its state and skips the APT step. If the installed version is newer, it reports the version mismatch and exits before APT runs. For manual installation, copy the archive to the Pi and run `sudo apt install ./rpi-web-control_0.10.0-2_arm64.deb` there.
+The installer verifies the installed version and service state. A fresh install starts the service, and an upgrade restarts a running service. A previously installed, intentionally stopped service stays stopped. If the selected version is already installed, the installer checks its state and skips the APT step. If the installed version is newer, it reports the version mismatch and exits before APT runs. For manual installation, copy the archive to the Pi and run `sudo apt install ./rpi-web-control_0.11.0-1_arm64.deb` there.
 
 ### Collect diagnostics
 
@@ -112,13 +112,13 @@ The web service runs as the system account `rpi-web-control`. The installer adds
 
 ## Network setup
 
-After installation, open **Network → Join Wi-Fi network** to scan for a router and connect the Pi while retaining the wired management address. Open **Network → Wi-Fi access point** to host a network for a phone or laptop. The Pi can serve the console and assign client addresses offline. [Join Wi-Fi](network.md#join-an-existing-wi-fi-network) · [Access point setup](network.md#create-a-wi-fi-access-point)
+After installation, open **Network settings → Join an existing Wi-Fi network** to scan for a router and connect the Pi while retaining the wired management address. Open **Network settings → Host a Wi-Fi hotspot** to host a network for a phone or laptop. The Pi can serve the console and assign client addresses offline. [Join Wi-Fi](network.md#join-an-existing-wi-fi-network) · [Access point setup](network.md#create-a-wi-fi-access-point)
 
 For recovery without DHCP, connect the workstation directly by Ethernet, set it to `192.168.55.10/24`, and open `https://192.168.55.100:8080`. The recovery timer starts automatically on installation and at boot. You can reserve another address or disable it in `/etc/default/rpi-web-control`. [Network and recovery guide](network.md#connect-by-ethernet-when-the-main-address-is-unknown)
 
 ## External storage
 
-In **Storage**, use **Record to USB** or **Record to NVMe** for a ready drive, then check the active directory. For a new drive, expand **USB drive setup** or **PCIe NVMe setup** to mount an existing ext4 volume or explicitly erase and prepare the disk. A managed volume uses its filesystem UUID for mounting across reboots. Its recordings and its entry in `/etc/fstab` survive package removal and purge. [Recording destinations, downloads and cleanup](storage.md)
+In **Recording drives**, choose **Use USB** or **Use NVMe** for a ready drive, then check the active directory. For a new drive, expand **Set up a USB drive** or **Set up a PCIe NVMe drive** to mount an existing ext4 volume or explicitly erase and prepare the disk. A managed volume uses its filesystem UUID for mounting across reboots. Its recordings and its entry in `/etc/fstab` survive package removal and purge. [Recording destinations, downloads and cleanup](storage.md)
 
 Mount the destination at a stable path, such as `/srv/camera-ssd`. Create a directory on that mounted filesystem writable by the service account. Add its absolute path to `RPI_CONTROL_STORAGE_ROOTS` in the defaults file along with any other allowed roots, separated by colons. Set `RPI_CONTROL_REQUIRED_MOUNTS=/srv/camera-ssd` for this volume, specifying its actual mountpoint. Use colons for additional mountpoints. The controller refuses recordings beneath a required volume when it is absent. Restart the service and select the desired directory in the web interface. The service's filesystem protections make home directories read-only.
 

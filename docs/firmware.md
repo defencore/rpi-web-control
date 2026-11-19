@@ -1,13 +1,13 @@
 # Sensor profiles and Raspberry Pi boot configuration
 
-The Camera page shows the sensor detected by libcamera, its available video modes, and the firmware settings for the next startup. Open the firmware panel to read the current `/boot/firmware/config.txt`. A staged profile starts taking effect when the board boots. Verify the detected sensor again after reconnecting.
+Open **Camera settings → Boot profile** to choose the camera the Pi loads at startup and inspect `/boot/firmware/config.txt`. After the Pi restarts, open **Detected sensor details** to verify which sensor libcamera found. **Video settings** controls the capture resolution and frame rate. **Sensor tests** measures the available modes.
 
 ## Switch a profile
 
-1. Open **Camera** and refresh the firmware panel. Find the sensor under **Installed overlays** or **Missing overlays**. Each group is sorted alphabetically. Check the current file and selected CSI connector.
+1. Open **Camera settings → Boot profile** and choose **Reload boot file**. Find the sensor under **Installed overlays** or **Missing overlays**. Each group is sorted alphabetically. Check the current file and selected CSI connector.
 2. Choose the sensor fitted to the board and the connector routed by the carrier. CAM0 produces an overlay with the `,cam0` option. CAM1 uses the overlay's default connector. For modules with multiple oscillator or lane options, use the module vendor's specification. For a CM5, use an explicit camera profile. The automatic option uses firmware detection for supported official camera modules on Raspberry Pi SBCs.
-3. Select **Stage profile**. The panel displays the resulting file and marks the change **Reboot pending**. If the menu reports **overlay missing**, install the matching compiled overlay and compatible sensor driver for the board's kernel, then refresh the panel.
-4. Stop active recordings and release their trigger claims. Select **Reboot device…** and confirm. The management connection closes as the OS restarts. Reconnect to the device and check the model and sensor modes before enabling preview or recording. If the physical camera needs changing, power the board down before changing its ribbon connection.
+3. Select **Save for next boot**. Review the resulting file and check for **Reboot to apply**. If the menu reports **overlay missing**, install the matching compiled overlay and compatible sensor driver for the board's kernel, then refresh the panel.
+4. Stop active recordings and release their trigger claims. Select **Reboot Pi…** and confirm. The management connection closes as the OS restarts. Reconnect to the device and check the model and sensor modes before enabling preview or recording. If the physical camera needs changing, power the board down before changing its ribbon connection.
 5. If the new sensor fails to enumerate, open the firmware panel, restore its previous configuration, and reboot to load that configuration. A single undo is available for the last successful profile change while the current file still matches the saved revision.
 
 For example, Camera Module 3 on CAM0 produces this block in the unconditional section.
@@ -22,14 +22,14 @@ dtoverlay=imx708,cam0
 
 ## OV9281 and four-lane IMX577 on CAM0
 
-The **Sensor boot profile** menu includes both OV9281 and IMX577. Select the sensor fitted to CAM0, set **CSI connector** to **CAM0**, and review the directive preview before selecting **Stage profile**. Each choice writes `camera_auto_detect=0` and the corresponding directive under `[all]`.
+The **Sensor boot profile** menu includes both OV9281 and IMX577. Select the sensor fitted to CAM0, set **CSI connector** to **CAM0**, and review the directive preview before selecting **Save for next boot**. Each choice writes `camera_auto_detect=0` and the corresponding directive under `[all]`.
 
 | Profile | CAM0 directive |
 | --- | --- |
 | OV9281 | `dtoverlay=ov9281,cam0` |
 | IMX577, four lanes at 750 MHz link frequency | `dtoverlay=imx577,cam0,4lane,link-frequency=750000000` |
 
-Both profiles stay in the menu when you switch. If the existing top-level boot file already contains both CAM0 directives in its global section, the panel shows **Choose a profile**. Select the fitted sensor, check the preview, and choose **Stage profile**. The helper backs up the original file and replaces the two directives with a single managed overlay for that sensor. **Restore backup** restores the original file, including both directives. Lines beginning with `#`, such as `# profile OV9281`, are comments.
+Both profiles stay in the menu when you switch. If the existing top-level boot file already contains both CAM0 directives in its global section, the panel shows **Choose a profile**. Select the fitted sensor, check the preview, and choose **Save for next boot**. The helper backs up the original file and replaces the two directives with a single managed overlay for that sensor. **Restore boot backup…** restores the original file, including both directives. Lines beginning with `#`, such as `# profile OV9281`, are comments.
 
 The IMX577 profile requires four CSI lanes on the connector and an installed `imx577.dtbo` and driver that support `4lane` and `link-frequency=750000000`. OV9281 requires `ov9281.dtbo` and its matching driver. The menu checks for the overlay file on the boot volume. After reboot, use the detected sensor model and mode list to verify the hardware and driver combination.
 

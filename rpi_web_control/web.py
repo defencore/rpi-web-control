@@ -62,7 +62,7 @@ def byte_range(value, size):
 def recording_query(query, *, listing):
     allowed = {"source", "target_id"}
     if listing:
-        allowed.add("cursor")
+        allowed.update(("cursor", "session"))
     params = parse_qs(query, strict_parsing=True, keep_blank_values=True, max_num_fields=len(allowed))
     if set(params) - allowed or any(len(values) != 1 for values in params.values()):
         raise ValueError("Invalid recording query parameters.")

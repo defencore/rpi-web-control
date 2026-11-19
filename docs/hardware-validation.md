@@ -14,21 +14,21 @@ On first connection compare the SSH host-key fingerprint with the same key on th
 ssh operator@capture-pi.local 'sh -s' < tools/inspect-board.sh > "capture-pi-$(date -u +%Y%m%dT%H%M%SZ).txt"
 ```
 
-Check the reported model and arm64 package architecture, OS release, boot volume and intended recording destination. The report enumerates camera modes before installation or while the controller is inactive. With the service running, use the **Camera** page for the detected sensor and its modes. Keep the pre-install report with the later capture results.
+Check the reported model and arm64 package architecture, OS release, boot volume and intended recording destination. The report enumerates camera modes before installation or while the controller is inactive. With the service running, open **Camera settings → Detected sensor details** to identify the sensor and **Sensor tests** to see its modes. Keep the pre-install report with the later capture results.
 
 ## Transfer, install and open the console
 
 From the workstation, copy the verified archive to the operator's home directory and open an SSH shell on the target.
 
 ```sh
-scp dist/rpi-web-control_0.10.0-2_arm64.deb operator@capture-pi.local:
+scp dist/rpi-web-control_0.11.0-1_arm64.deb operator@capture-pi.local:
 ssh operator@capture-pi.local
 ```
 
 On the Pi, run the following commands from the operator's home directory. When upgrading an existing installation, stop active recordings first.
 
 ```sh
-sudo apt install ./rpi-web-control_0.10.0-2_arm64.deb
+sudo apt install ./rpi-web-control_0.11.0-1_arm64.deb
 systemctl is-active rpi-web-control.service
 sudo openssl x509 -in /etc/rpi-web-control/tls.crt -noout -fingerprint -sha256
 ```
@@ -41,8 +41,8 @@ If the console reports a clock difference during offline commissioning, compare 
 
 ### From the console
 
-1. Finish any recording, release its trigger claims and turn off browser preview and live streaming. Open **Camera → Test sensor modes**. Under **Mode to test**, choose one resolution and bit depth, or leave **All detected modes** selected.
-2. Choose **Run test**. Each mode runs at its advertised maximum with a half-second warmup and a one-second measurement from the camera's sensor timestamps. Check the measured FPS and result for each entry, including entries that have the same resolution at different bit depths. A failed row includes the reason. **Cancel test** releases the camera. A new manual or trigger recording request also ends the test so recording can begin.
+1. Finish any recording, release its trigger claims and turn off browser preview and live streaming. Open **Camera settings → Sensor tests**. Under **Mode to test**, choose one resolution and bit depth, or leave **All detected modes** selected.
+2. Choose **Run sensor test**. Each mode runs at its advertised maximum with a half-second warmup and a one-second measurement from the camera's sensor timestamps. Check the measured FPS and result for each entry, including entries that have the same resolution at different bit depths. A failed row includes the reason. **Cancel test** releases the camera. A new manual or trigger recording request also ends the test so recording can begin.
 3. Results remain available in the console until the next test or service restart. Capture testing runs in memory and preserves saved camera settings. To check recording or network throughput, continue with [capture and playback](#capture-and-playback) or [live reception](live.md).
 
 ### From a workstation over SSH
@@ -79,7 +79,7 @@ sudo fuser -v /dev/media3 /dev/media0
 
 Compare the service PID with any reported media lock. `fuser` lists processes with open devices. PipeWire and WirePlumber can appear there during desktop camera discovery. An open device alone does not identify which process held the capture lock at the time of failure. [Debian fuser manual](https://manpages.debian.org/trixie/psmisc/fuser.1.en.html) · [libcamera pipeline acquisition](https://docs.libcamera.org/master/internal-api/classlibcamera_1_1PipelineHandler.html)
 
-If the controller is using the camera, select **Disable preview** in **Monitor**, select **Stop live stream** in **Stream** if active, and finish any manual or trigger-owned recording. Closing the browser leaves these controls in their existing state. If a desktop application is actively using the camera, end capture in that application. Retry with a fresh report filename. When only desktop device monitors are listed and no lock is visible, retry before changing any services.
+If the controller is using the camera, select **Stop preview** in **Capture monitor**, select **Stop live stream** in **Network stream** if active, and finish any manual or trigger-owned recording. Closing the browser leaves these controls in their existing state. If a desktop application is actively using the camera, end capture in that application. Retry with a fresh report filename. When only desktop device monitors are listed and no lock is visible, retry before changing any services.
 
 ## Capture and playback
 
@@ -89,7 +89,7 @@ Start with a local clip at 30 fps. After it passes, use the [live receiver guide
 
 1. Select a supported resolution at 30 fps. Start recording with preview off. Enable preview, open a second viewer, close both viewers, then disable preview. The recording must cover the full interval.
 2. Make a second capture with OSD. Verify the text in recorded frames during playback. Record the effective OSD state at the selected rate.
-3. Repeat with the highest required sensor mode and OSD disabled. For a mode above 60 fps, note the estimated MB/s in **Camera → Capture settings**. Capture at least 60 seconds on the intended destination. During recording, note **Video written** and **Average video rate** on Monitor. Repeat with preview enabled and a slow consumer. Record the requested and measured FPS, number of stored frames, largest frame interval, any dropped-frame indicators, and visible changes to the preview. Include the dimensions when reporting a 240 fps result.
+3. Repeat with the highest required sensor mode and OSD disabled. For a mode above 60 fps, note the estimated MB/s in **Camera settings → Video settings**. Capture at least 60 seconds on the intended destination. During recording, note **Video written** and **Average video rate** on Capture monitor. Repeat with preview enabled and a slow consumer. Record the requested and measured FPS, number of stored frames, largest frame interval, any dropped-frame indicators, and visible changes to the preview. Include the dimensions when reporting a 240 fps result.
 4. Stop recording cleanly. Verify that the sidecar entry count equals the number of complete video frames and that sensor times advance. Inspect a frame near the beginning, middle, and end of the clip.
 5. Repeat the selected test after enough sustained recording to reach thermal equilibrium and fill the storage device's write cache. Observe CPU temperature, throttling, and free space during this interval. A short run measures initial throughput.
 
@@ -133,17 +133,17 @@ Exercise a configured input that is absent or unavailable. Check the error again
 
 ## Storage, service and networking
 
-- On a spare PCIe NVMe disk with an existing ext4 partition, place a test file on the partition and retain its SHA-256. Unmount it and choose **Mount existing volume** under **PCIe NVMe setup**. Verify the file and checksum after mounting. Select **Record to NVMe**, verify the active directory and record a clip. After a normal reboot, confirm the same filesystem UUID with `findmnt --mountpoint /srv/rpi-web-control-nvme -o SOURCE,UUID,FSTYPE,OPTIONS` and record another clip.
+- On a spare PCIe NVMe disk with an existing ext4 partition, place a test file on the partition and retain its SHA-256. Unmount it and choose **Mount existing volume** under **Set up a PCIe NVMe drive**. Verify the file and checksum after mounting. Select **Use NVMe**, verify the active directory and record a clip. After a normal reboot, confirm the same filesystem UUID with `findmnt --mountpoint /srv/rpi-web-control-nvme -o SOURCE,UUID,FSTYPE,OPTIONS` and record another clip.
 - With explicit permission to erase a **disposable** PCIe SSD, verify its model and serial, then use **Erase disk and create ext4 volume**. Verify the resulting GPT, ext4 UUID and mount using `lsblk -o NAME,MODEL,SERIAL,PTTYPE,FSTYPE,UUID,MOUNTPOINTS`. Record at the intended mode and duration. Keep the measured rate, dropped frames and SSD identity with the acceptance results.
-- Repeat the mount and recording checks with a spare USB flash drive. Select **Record to USB**, record a clip, then confirm the destination is on `/srv/rpi-web-control-usb`. Use a separate disposable device for any USB initialization test.
+- Repeat the mount and recording checks with a spare USB flash drive. Select **Use USB**, record a clip, then confirm the destination is on `/srv/rpi-web-control-usb`. Use a separate disposable device for any USB initialization test.
 - Check the cleanup controls with completed test sessions on the managed drive, another directory containing an unrelated file, and a completed clip on the system card. Review a single-session deletion, then a whole-directory cleanup. Check counts against the eligible sessions. On the test volume, confirm that the selected complete sessions are removed and unrelated data remains. Disk preparation and recording deletion must exclude every partition on the system disk. Replace the test volume between review and confirmation and verify that the stale request is refused.
-- Switch the destination back to the system card. Browse the previous clip on the managed NVMe SSD and select **Download recording (.zip)**. Compare the SHA-256 of each ZIP member (video, `frames.csv` and `session.json`) with the original on the SSD, then run the recording checker against the unpacked session.
+- Switch the destination back to the system card. Browse the previous clip on the managed NVMe SSD and select **Download ZIP**. Compare the SHA-256 of each ZIP member (video, `frames.csv` and `session.json`) with the original on the SSD, then run the recording checker against the unpacked session.
 - Choose a writable recording directory on the intended volume. Verify the actual output location and repeat across a service restart. Try an unauthorized path and an unwritable destination. The service must show the error and leave previous recordings readable.
 - Check storage exhaustion with a small disposable test volume. Record the last readable frame, sidecar consistency, reported fault, and recovery after selecting a writable destination.
 - With the package defaults, open the console in a fresh browser session and start and stop a recording without entering a token. Enable token sign-in, restart the service and check that a request to `/api/status` without credentials returns HTTP 401. Sign in and repeat the recording check. After upgrading, verify the configured access mode, credentials, earlier recordings and clean service shutdown.
 - For each board and adapter, record interface names, driver, NetworkManager version, client addressing and observed connectivity. From Ethernet, trial a fixed IP, reconnect to the new address, confirm and repeat the connection after reboot. Trial DHCP and let it expire, then check that the previous IP works again. On a wired-only CM5, exercise Ethernet with the radio absent.
 - Connect a workstation directly at `192.168.55.10/24` with no DHCP server. After boot and again after reconnecting the cable, open `https://192.168.55.100:8080`. Check the **Wired recovery** state, including **Already assigned** when the primary address is also `.100`. Repeat with the cable in the managed bridge and verify that the main address, gateway and DNS remain usable. [Wired recovery procedure](network.md#connect-by-ethernet-when-the-main-address-is-unknown)
-- From Ethernet with the software Wi-Fi radio off, open **Network → Wi-Fi access point**, enable Wi-Fi and start a standalone AP. Join from a phone, check its DHCP lease, open the displayed URL over Wi-Fi and confirm the trial. With a client attached, request a scan on the AP radio. Cancel the warning and verify that no scan starts. Confirm a second request and record whether the driver returns neighboring networks. Verify the AP profile, client DHCP and Ethernet access afterwards. Check the saved SSID after reboot. Repeat with automatic rollback and verify the previous profile and wired console are usable. On a wired-only board, check the message for a missing radio. [AP setup](network.md#create-a-wi-fi-access-point)
+- From Ethernet with the software Wi-Fi radio off, open **Network settings → Host a Wi-Fi hotspot**, enable Wi-Fi and start a standalone AP. Join from a phone, check its DHCP lease, open the displayed URL over Wi-Fi and confirm the trial. With a client attached, request a scan on the AP radio. Cancel the warning and verify that no scan starts. Confirm a second request and record whether the driver returns neighboring networks. Verify the AP profile, client DHCP and Ethernet access afterwards. Check the saved SSID after reboot. Repeat with automatic rollback and verify the previous profile and wired console are usable. On a wired-only board, check the message for a missing radio. [AP setup](network.md#create-a-wi-fi-access-point)
 - With Ethernet at a known static address, scan from a Wi-Fi adapter, select an SSID, enter its password and connect. Check the DHCP lease and open the console from the wireless LAN. Verify the wired IP and the separate Wi-Fi IP during the trial, after confirmation and after reboot. Repeat with an incorrect password, a hidden SSID and an expired trial. [Join Wi-Fi](network.md#join-an-existing-wi-fi-network)
 - For a bridge, verify `br-rpi` owns the Pi's address and both selected links appear in `ip link show master br-rpi`. Connect one client by cable and one by Wi-Fi. Verify HTTPS access from both, client-to-client communication and the source of their DHCP leases. Test upstream DHCP on an existing LAN and Pi-provided DHCP on an isolated LAN. Let an unconfirmed bridge change expire and check both ports return to their previous state. [Network setup](network.md)
 

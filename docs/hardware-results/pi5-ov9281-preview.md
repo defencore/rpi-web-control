@@ -13,4 +13,4 @@ Tested on a Raspberry Pi 5 with controller 0.3.0-1 and libcamera v0.7.2+rpt20260
 
 At the advertised maximum of 247.83 fps in 10-bit mode, the controller negotiated the requested mode and started capture. The camera frontend timed out before the controller could deliver a preview JPEG. The native test independently reproduced the timeout. The sensor and the CSI path delivered frames at the other settings above with the same boot configuration.
 
-In **Camera**, select the matching 640 × 400 entry, enter the desired **Target frame rate (fps)** after selecting the entry, then choose **Save camera settings**. In **Monitor**, enable preview. The browser samples the capture at up to eight JPEG frames per second. The measured frame rate in **Monitor** refers to the sensor.
+In **Camera settings → Video settings**, select the matching 640 × 400 entry, enter the desired **Target frame rate (fps)** and choose **Save video settings**. In **Capture monitor**, choose **Start preview**. The browser samples the capture at up to eight JPEG frames per second. **Measured frame rate** under **Camera activity** refers to the sensor.

@@ -1,9 +1,8 @@
-import {byId, setText, element, button, capacity, destinationLabel} from "./ui.js";
+import {byId, setText, element, button, capacity, destinationLabel, isRecordingId} from "./ui.js";
 import {setupNetworkPanel} from "./network.js";
 import {setupDevicePanels, renderSensorProperties} from "./device.js";
 
-const pages = {monitor: "Monitor", recordings: "Recordings", live: "Live stream", camera: "Camera", storage: "Storage", triggers: "Triggers", network: "Network"};
-const ruleNames = {timer: "Timer", gpio: "GPIO contact", sensor: "Sensor threshold", uart: "UART command"};
+const pageLinks = [...byId("main-nav").querySelectorAll("[data-page]")];
 const defaults = {
   timer: {interval_s: 60, duration_s: 5},
   gpio: {pin: 17, contact: "NO", debounce_ms: 30},
@@ -40,6 +39,7 @@ let editingRule = null;
 let lastRuleList = null;
 let lastRoots = null;
 let nextStreamAttempt = 0;
+let stoppedSession = null;
 
 const network = setupNetworkPanel({api, act, notice, busy: () => actionPending});
 const device = setupDevicePanels({api, act, notice, busy: () => actionPending, chooseDestination: saveDestination});
@@ -56,6 +56,10 @@ function saveDestination(path) {
 function notice(message = "", error = false, target = "feedback") {
   setText(target, message);
   byId(target).classList.toggle("error", error);
+  if (target === "feedback") {
+    byId("feedback-bar").hidden = !message;
+    byId("feedback-bar").classList.toggle("error", error);
+  }
 }
 
 async function api(path, data) {
@@ -78,6 +82,7 @@ function signInScreen() {
   const wasSignedIn = authenticated;
   authenticated = false;
   snapshot = null;
+  stoppedSession = null;
   capabilities = null;
   refreshId++;
   clearTimeout(polling);
@@ -96,6 +101,8 @@ function signInScreen() {
   dirtyForms.clear();
   device.reset();
   byId("trigger-form").hidden = true;
+  byId("saved-rules").hidden = false;
+  editingRule = null;
   network.reset();
   notice(wasSignedIn ? "Sign in to continue." : "", false, "login-message");
   byId("access-token").focus();
@@ -170,6 +177,12 @@ async function refresh() {
     if (ticket !== refreshId) return;
     const first = !authenticated;
     const finishedTest = snapshot?.camera.mode_test?.state === "running" && data.camera.mode_test?.state !== "running";
+    if (data.camera.recording || data.camera.last_error || data.storage?.error ||
+        data.config.storage.directory !== snapshot?.config.storage.directory) {
+      stoppedSession = null;
+    } else if (snapshot?.camera.recording && snapshot.camera.session === data.camera.session && !data.recording_sources.length) {
+      stoppedSession = data.camera.session;
+    }
     authenticated = true;
     snapshot = data;
     byId("logout").hidden = !data.token_required;
@@ -204,7 +217,7 @@ async function refresh() {
 async function act(work, message) {
   if (actionPending) return;
   actionPending = true;
-  const controls = [...document.querySelectorAll("#workspace button:not([disabled])")];
+  const controls = [...document.querySelectorAll("#workspace button:enabled:not(#nav-toggle, #dismiss-feedback)")];
   controls.forEach(control => { control.disabled = true; });
   notice();
   try {
@@ -221,21 +234,26 @@ async function act(work, message) {
 
 function navigate() {
   const hash = window.location.hash.slice(1);
-  page = Object.hasOwn(pages, hash) ? hash : "monitor";
+  const [requested, detail, ...rest] = hash.split("/");
+  const sessionId = requested === "recordings" && !rest.length && isRecordingId(detail) ? detail : null;
+  const cameraTask = hash === "camera/tests" || hash === "camera/profile";
+  const validRoute = hash === requested || Boolean(sessionId) || cameraTask;
+  page = validRoute && pageLinks.some(link => link.dataset.page === requested) ? requested : "monitor";
   byId("nav-toggle").setAttribute("aria-expanded", "false");
-  for (const [id, name] of Object.entries(pages)) {
-    byId("page-" + id).hidden = id !== page;
-    const link = document.querySelector('[data-page="' + id + '"]');
-    if (id === page) link.setAttribute("aria-current", "page");
-    else link.removeAttribute("aria-current");
-    if (id === page) {
-      setText("page-title", name);
-      document.title = name + " · Capture Control";
-    }
+  for (const link of pageLinks) {
+    const active = link.dataset.page === page;
+    byId("page-" + link.dataset.page).hidden = !active;
+    if (active) {
+      link.setAttribute("aria-current", "page");
+      setText("page-title", link.textContent);
+      document.title = link.textContent + " · Capture Control";
+    } else link.removeAttribute("aria-current");
   }
+  if (page === "camera") renderCameraSection(hash);
+  renderStoppedRecording();
   notice();
   updateStream();
-  if (authenticated) device.open(page);
+  if (authenticated) device.open(page, sessionId);
   if (page === "camera" && authenticated && capabilities?.available === false) loadCapabilities();
 }
 
@@ -264,7 +282,7 @@ function updateStream() {
       setText("stage-help", "Waiting for the connection to resume.");
     } else {
       setText("stage-title", !available ? "Camera unavailable" : enabled ? "Waiting for frames" : "Preview is off");
-      setText("stage-help", !available ? (capabilities.error || "Check the camera connection.") : enabled ? "The preview will resume when frames arrive." : "Enable preview to see the camera feed.");
+      setText("stage-help", !available ? (capabilities.error || "Check the camera connection.") : enabled ? "The preview will resume when frames arrive." : "You can record with the preview off.");
     }
   }
 }
@@ -284,7 +302,7 @@ function renderRecordingStorage(cam, storageError) {
   const medium = destinationLabel(dirs);
   const hasCapacity = deviceOnline && Number.isFinite(volume?.free_bytes) && volume.total_bytes > 0;
   const free = hasCapacity ? capacity(volume.free_bytes) + " free" : "Capacity unavailable";
-  setText("toolbar-destination", deviceOnline ? "Record to " + medium + (hasCapacity ? " · " + free : "") : "Recording storage");
+  setText("toolbar-destination", deviceOnline ? medium + (hasCapacity ? " · " + free : "") : "Recording destination");
   byId("toolbar-destination").title = dirs.current;
   setText("monitor-destination", medium);
   setText("record-location", dirs.current);
@@ -303,6 +321,13 @@ function renderRecordingStorage(cam, storageError) {
   setText("monitor-written", Number.isFinite(bytes) ? capacity(bytes) : "—");
   setText("monitor-rate", hasRate ? recordingSizeFormat.format(rate / 1e6) + " MB/s" : "—");
   setText("monitor-remaining", hasCapacity && hasRate ? timeRemaining(volume.free_bytes / rate) : "—");
+}
+
+function renderStoppedRecording() {
+  const id = stoppedSession?.split("/").pop();
+  const show = deviceOnline && isRecordingId(id) && window.location.hash !== "#recordings/" + id && !snapshot?.recording_sources.length;
+  byId("recording-stopped").hidden = !show;
+  if (show) byId("view-stopped-recording").href = "#recordings/" + id;
 }
 
 function renderMonitor() {
@@ -327,15 +352,14 @@ function renderMonitor() {
   byId("trigger-pause").disabled = actionPending || !deviceOnline;
   byId("manual-hold").hidden = !deviceOnline || !triggers.length || (!manual && !cam.recording);
   byId("manual-hold").disabled = actionPending;
-  setText("manual-hold", manual ? "Release manual hold" : "Add manual hold");
+  setText("manual-hold", manual ? "Return control to triggers" : "Keep recording after triggers stop");
   setText("device-name", capabilities?.model || (cam.backend === "simulated" ? "Simulated camera" : "Capture device"));
   const preview = byId("preview");
   preview.disabled = actionPending || !deviceOnline || testing || (!camAvailable && !cam.preview);
-  preview.setAttribute("aria-pressed", String(cam.preview));
-  preview.querySelector("span").textContent = cam.preview ? "Disable preview" : "Enable preview";
+  preview.querySelector("span").textContent = cam.preview ? "Stop preview" : "Start preview";
   setText("stream-state", !deviceOnline ? "Unknown" : cam.preview ? "Enabled" : "Off");
   byId("stream-state").classList.toggle("live", deviceOnline && cam.preview);
-  setText("actual-fps", cam.active && Number.isFinite(cam.actual_fps) ? fpsFormat.format(cam.actual_fps) : "—");
+  setText("actual-fps", cam.active && Number.isFinite(cam.actual_fps) ? fpsFormat.format(cam.actual_fps) + " fps" : "—");
   setText("target-fps", fpsFormat.format(settings.fps) + " fps");
   const mode = cam.sensor_mode;
   setText("active-sensor-mode", mode ? mode.width + " × " + mode.height + " · " + mode.bit_depth + "-bit" : "—");
@@ -353,15 +377,18 @@ function renderMonitor() {
   byId("record-state").classList.toggle("recording", deviceOnline && cam.recording);
   byId("record-state").classList.toggle("waiting", deviceOnline && !cam.recording && owners.length > 0);
   renderRecordingStorage(cam, storageError);
-  const labels = owners.map(source => source.startsWith("trigger:") ? "rule “" + source.slice(8) + "”" : "manual control");
-  setText("record-sources", owners.length ? "Recording requested by " + labels.join(", ") : "");
-  byId("record-sources").hidden = !deviceOnline || !owners.length;
+  renderStoppedRecording();
+  const labels = triggers.map(source => "“" + source.slice(8) + "”");
+  if (manual) labels.push("manual control");
+  setText("record-sources", triggers.length ? "Controlled by " + labels.join(", ") : "");
+  byId("record-sources").hidden = !deviceOnline || !triggers.length;
   setText("camera-error", cam.last_error || capabilities?.error || "");
   const rules = snapshot.config.triggers;
   const active = (snapshot.triggers || []).filter(rule => rule.active).length;
   const errors = (snapshot.triggers || []).filter(rule => rule.state === "error").length;
-  setText("trigger-count", rules.length + (rules.length === 1 ? " rule" : " rules"));
-  setText("trigger-summary", rules.length ? [rules.filter(rule => rule.enabled !== false).length + " enabled", active + " active", ...(errors ? [errors + " in error"] : [])].join(" · ") : "Manual recording only.");
+  const enabledCount = rules.filter(rule => rule.enabled !== false).length;
+  const triggerState = [enabledCount + " enabled", ...(active ? [active + " active"] : []), ...(errors ? [errors + " with errors"] : [])].join(" · ");
+  setText("trigger-summary", snapshot.triggers_paused ? "Paused" : enabledCount ? triggerState : "Manual recording only");
   updateStream();
 }
 
@@ -373,6 +400,17 @@ function fillSettings(formId, settings) {
     if (!input) continue;
     if (input.type === "checkbox") input.checked = value;
     else if (input.value !== String(value)) input.value = value;
+  }
+}
+
+function renderCameraSection(hash) {
+  const links = [...byId("camera-sections").querySelectorAll("a")];
+  const active = links.find(link => link.hash.slice(1) === hash) || links[0];
+  for (const link of links) {
+    const current = link === active;
+    byId(link.getAttribute("aria-controls")).hidden = !current;
+    if (current) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
   }
 }
 
@@ -396,7 +434,7 @@ function renderCameraSettings() {
       : "Enter valid output dimensions to estimate write rate and recording size.";
     help += " Above 60 fps, sensor time is saved in frames.csv without an image overlay.";
   } else if (fields.fps.validity.valid) {
-    help = "JPEG size varies with the scene. Check Average video rate on Monitor during a sample recording. Each frame’s sensor time is saved in frames.csv.";
+    help = "JPEG size varies with the scene. Check Average video rate on Capture monitor during a sample recording. Each frame’s sensor time is saved in frames.csv.";
   }
   setText("capture-format-help", help);
   const cam = snapshot?.camera;
@@ -454,13 +492,16 @@ function renderModeTest() {
   const cam = snapshot.camera;
   const test = cam.mode_test;
   const running = test?.state === "running";
-  const inUse = cam.preview || cam.live?.enabled || cam.recording || snapshot.recording_sources.length > 0;
+  const activeUses = [];
+  if (cam.preview) activeUses.push("the browser preview");
+  if (cam.live?.enabled) activeUses.push("the network stream");
+  if (cam.recording || snapshot.recording_sources.length) activeUses.push("the recording");
   byId("mode-test-start").hidden = running;
-  byId("mode-test-start").disabled = actionPending || inUse || !test;
+  byId("mode-test-start").disabled = actionPending || activeUses.length > 0 || !test;
   byId("mode-test-cancel").hidden = !running;
   byId("mode-test-cancel").disabled = actionPending;
   byId("mode-test-selection").disabled = actionPending || running;
-  setText("mode-test-lock", inUse && !running ? "Stop preview, streaming and any recording sources before running a test." : "");
+  setText("mode-test-lock", activeUses.length && !running ? "Stop " + activeUses.join(" and ") + " before testing the sensor." : "");
   const results = test?.results || [];
   const sensorLabel = mode => mode.width + " × " + mode.height + " · " + mode.bit_depth + "-bit";
   let status = "";
@@ -511,7 +552,7 @@ function renderRoots() {
   setText("storage-capacity", Number.isFinite(volume?.free_bytes) && Number.isFinite(volume?.total_bytes)
     ? capacity(volume.free_bytes) + " free of " + capacity(volume.total_bytes) : (volume?.error || "Capacity unavailable."));
   setText("storage-draft", byId("storage-form").elements.directory.value !== directory
-    ? "Unsaved directory. Recordings still use " + directory + "." : "");
+    ? "Unsaved folder. New recordings still go to " + directory + "." : "");
   const roots = snapshot.storage_roots || [];
   if (JSON.stringify(roots) === lastRoots) return;
   lastRoots = JSON.stringify(roots);
@@ -534,6 +575,15 @@ function gpioBehavior(rule) {
   return start + "Stops when " + end + (rule.stop_on_return ? " or the start contact returns to " + idle : "") + ".";
 }
 
+function ruleBehavior(rule) {
+  if (rule.type === "gpio") return gpioBehavior(rule);
+  if (rule.type === "timer") return "Records for " + rule.duration_s + " s every " + rule.interval_s + " s.";
+  if (rule.type === "uart") return rule.device + " · “" + rule.start_command + "” starts recording. “" + rule.stop_command + "” stops it.";
+  const above = rule.comparison === "above";
+  const releases = above ? rule.threshold - rule.hysteresis : rule.threshold + rule.hysteresis;
+  return rule.path + " · Starts at " + rule.threshold + (above ? " or above. Stops below " : " or below. Stops above ") + releases + ".";
+}
+
 function renderRules() {
   const rules = snapshot.config.triggers;
   const statuses = snapshot.triggers || [];
@@ -543,17 +593,19 @@ function renderRules() {
   lastRuleList = key;
   const list = byId("trigger-list");
   if (!rules.length) {
-    list.replaceChildren(element("p", "No rules configured. Add a rule to start recording from a hardware input or timer.", "field-help"));
+    list.replaceChildren(element("p", "Recording is manual. Add a rule to record from a button, timer, sensor or serial command.", "field-help"));
     return;
   }
+  const focused = document.activeElement?.dataset.editRule;
+  const states = {disabled: "Disabled", paused: "Paused", ready: "Ready", starting: "Starting", error: "Input error"};
   list.replaceChildren(...rules.map(rule => {
     const status = statuses.find(item => item.id === rule.id);
     const holding = owners.includes("trigger:" + rule.id);
-    const state = holding ? "Holding recording" : status?.state || (rule.enabled === false ? "disabled" : "starting");
+    const state = status?.state || (rule.enabled === false ? "disabled" : "starting");
     const row = element("div", undefined, "rule-row");
     const info = element("div");
-    info.append(element("strong", rule.id), element("p", ruleNames[rule.type] + " · " + state, holding ? "rule-holding" : "subtle"));
-    if (rule.type === "gpio") info.append(element("p", gpioBehavior(rule)));
+    info.append(element("strong", rule.id), element("p", holding ? "Holding recording" : states[state] || state, holding ? "rule-holding" : "subtle"),
+      element("p", ruleBehavior(rule)));
     if (status?.error) info.append(element("p", status.error, "danger"));
     const actions = element("div", undefined, "rule-actions");
     if (holding) actions.append(button("Disable rule", () => {
@@ -563,19 +615,16 @@ function renderRules() {
         if (JSON.stringify(rule) !== JSON.stringify(current.find(item => item.id === rule.id)))
           throw new Error("This rule changed on the device. Review its current settings and try again.");
         await api("config", {triggers: current.map(item => item.id === rule.id ? {...item, enabled: false} : item)});
-        if (editingRule?.id === rule.id) byId("trigger-form").hidden = true;
       }, "Rule disabled.");
     }));
-    actions.append(button("Edit", () => editRule(rule)), button("Remove", () => {
-      if (!window.confirm('Remove the recording rule "' + rule.id + '"?')) return;
-      act(async () => {
-        await api("config", {triggers: snapshot.config.triggers.filter(item => item.id !== rule.id)});
-        if (editingRule?.id === rule.id) byId("trigger-form").hidden = true;
-      }, "Rule removed.");
-    }, "button secondary small danger"));
+    const edit = button("Edit", () => editRule(rule));
+    edit.dataset.editRule = rule.id;
+    edit.setAttribute("aria-label", "Edit " + rule.id);
+    actions.append(edit);
     row.append(info, actions);
     return row;
   }));
+  if (focused) focusRule(focused);
 }
 
 function triggerField(name, title, value, options = {}) {
@@ -598,11 +647,11 @@ function triggerField(name, title, value, options = {}) {
   return label;
 }
 
-function gpioStopFields(rule) {
+function gpioFields(rule) {
   const saved = rule.stop;
   const selector = triggerField("stop_type", "Recording behavior", rule.toggle_on_press ? "toggle" : saved?.type || "level", {choices: [
     ["level", "Hold to record"], ["toggle", "Press once to start, press again to stop"],
-    ["gpio", "Stop with a second contact"], ["uart", "Stop with a UART command"],
+    ["gpio", "Stop with a second contact"], ["uart", "Stop with a serial command"],
   ]});
   selector.classList.add("full-field");
   const type = selector.querySelector("select");
@@ -612,11 +661,17 @@ function gpioStopFields(rule) {
   }
   const gpio = [
     field("gpio", "pin", "Stop BCM GPIO pin", {min: 0, max: 27}),
-    field("gpio", "contact", "Stop contact type", {choices: contactChoices}),
-    field("gpio", "debounce_ms", "Stop debounce time (ms)", {min: 0, max: 1000}),
+    field("gpio", "contact", "Stop contact at rest", {choices: contactChoices}),
   ];
+  const stopDebounce = field("gpio", "debounce_ms", "Stop debounce time (ms)", {min: 0, max: 1000});
+  const timing = element("details", undefined, "rule-timing full-field");
+  const timings = element("div", undefined, "field-pair");
+  timings.append(triggerField("debounce_ms", "Start debounce time (ms)", rule.debounce_ms, {min: 0, max: 1000}), stopDebounce);
+  timing.append(element("summary", "Contact timing"), timings);
+  timing.open = rule.debounce_ms !== defaults.gpio.debounce_ms ||
+    (saved?.type === "gpio" && saved.debounce_ms !== gpioStopDefaults.gpio.debounce_ms);
   const uart = [
-    field("uart", "device", "Stop UART device", {text: true}),
+    field("uart", "device", "Stop serial port", {text: true}),
     field("uart", "baud", "Stop baud rate", {min: 1}),
     field("uart", "command", "Stop command", {text: true}),
   ];
@@ -624,11 +679,11 @@ function gpioStopFields(rule) {
   onReturn.type = "checkbox";
   onReturn.name = "stop_on_return";
   onReturn.checked = rule.stop_on_return === true;
-  const returnLabel = element("label", undefined, "check-line");
+  const returnLabel = element("label", undefined, "check-line full-field");
   returnLabel.append(onReturn, "Also stop when the start contact returns to normal");
   function showSelection() {
     returnLabel.hidden = onReturn.disabled = !["gpio", "uart"].includes(type.value);
-    for (const [kind, fields] of [["gpio", gpio], ["uart", uart]]) {
+    for (const [kind, fields] of [["gpio", [...gpio, stopDebounce]], ["uart", uart]]) {
       for (const label of fields) {
         label.hidden = type.value !== kind;
         label.querySelector("input, select").disabled = label.hidden;
@@ -637,7 +692,11 @@ function gpioStopFields(rule) {
   }
   type.addEventListener("change", showSelection);
   showSelection();
-  return [selector, ...gpio, ...uart, returnLabel];
+  const hint = element("div", undefined, "field-help gpio-rule-help full-field");
+  hint.id = "gpio-rule-help";
+  return [selector, triggerField("pin", "Start BCM GPIO pin", rule.pin, {min: 0, max: 27}),
+    triggerField("contact", "Start contact at rest", rule.contact, {choices: contactChoices}),
+    ...gpio, ...uart, returnLabel, hint, timing];
 }
 
 function gpioRuleFromForm(fields) {
@@ -674,6 +733,21 @@ function describeGpioRule() {
   hint.replaceChildren(element("p", wiring), element("p", gpioBehavior(rule) + armed));
 }
 
+function validateRuleFields() {
+  const fields = byId("trigger-form").elements;
+  if (fields.type.value === "timer") {
+    fields.duration_s.setCustomValidity(fields.duration_s.valueAsNumber >= fields.interval_s.valueAsNumber
+      ? "Use a recording duration shorter than the repeat interval." : "");
+  } else if (fields.type.value === "gpio") {
+    fields.stop_pin.setCustomValidity(fields.stop_type.value === "gpio" && fields.stop_pin.valueAsNumber === fields.pin.valueAsNumber
+      ? "Choose a different GPIO pin for the stop contact." : "");
+    describeGpioRule();
+  } else if (fields.type.value === "uart") {
+    fields.stop_command.setCustomValidity(fields.stop_command.value === fields.start_command.value
+      ? "Choose different serial commands for starting and stopping." : "");
+  }
+}
+
 function ruleFields(type, data) {
   const field = (name, label, opts) => triggerField(name, label, data[name], opts);
   let fields;
@@ -681,28 +755,27 @@ function ruleFields(type, data) {
     case "timer":
       fields = [field("interval_s", "Repeat interval (s)", {min: 0.1, step: "any"}), field("duration_s", "Recording duration (s)", {min: 0.1, step: "any"})];
       break;
-    case "gpio": {
-      const hint = element("div", undefined, "field-help gpio-rule-help full-field");
-      hint.id = "gpio-rule-help";
-      fields = [field("pin", "BCM GPIO pin", {min: 0, max: 27}), field("contact", "Contact type", {choices: contactChoices}),
-        ...gpioStopFields(data), field("debounce_ms", "Debounce time (ms)", {min: 0, max: 1000}), hint];
+    case "gpio":
+      fields = gpioFields(data);
       break;
-    }
     case "sensor":
-      fields = [field("path", "Sensor sysfs path", {text: true}), field("comparison", "Record when", {choices: [["above", "Above threshold"], ["below", "Below threshold"]]}), field("threshold", "Threshold (sensor units)", {step: "any"}), field("hysteresis", "Hysteresis (sensor units)", {min: 0, step: "any"}), field("poll_ms", "Poll interval (ms)", {min: 20, max: 60000})];
+      fields = [field("path", "Sensor file (sysfs path)", {text: true}), field("comparison", "Start recording", {choices: [["above", "At or above the threshold"], ["below", "At or below the threshold"]]}), field("threshold", "Threshold (sensor units)", {step: "any"}), field("hysteresis", "Reset margin (hysteresis)", {min: 0, step: "any"}), field("poll_ms", "Read interval (ms)", {min: 20, max: 60000})];
       break;
     case "uart":
-      fields = [field("device", "UART device", {text: true}), field("baud", "Baud rate", {min: 1}), field("start_command", "Start command", {text: true}), field("stop_command", "Stop command", {text: true})];
+      fields = [field("device", "Serial port", {text: true}), field("baud", "Baud rate", {min: 1}), field("start_command", "Start command", {text: true}), field("stop_command", "Stop command", {text: true})];
       break;
   }
   byId("rule-fields").replaceChildren(...fields);
-  if (type === "gpio") describeGpioRule();
+  validateRuleFields();
 }
 
 function editRule(rule = null) {
   editingRule = rule;
   const form = byId("trigger-form");
   form.hidden = false;
+  byId("saved-rules").hidden = true;
+  byId("remove-rule").hidden = !rule;
+  setText("rule-error", "");
   if (rule) form.elements.id.value = rule.id;
   else {
     const ids = new Set(snapshot.config.triggers.map(item => item.id));
@@ -712,9 +785,21 @@ function editRule(rule = null) {
   }
   form.elements.type.value = rule?.type || "gpio";
   form.elements.enabled.checked = rule?.enabled !== false;
-  setText("rule-title", rule ? "Edit rule" : "New rule");
+  setText("rule-title", rule ? "Edit “" + rule.id + "”" : "New recording rule");
   ruleFields(form.elements.type.value, rule || defaults.gpio);
   form.elements.type.focus();
+}
+
+function focusRule(id) {
+  const edit = id && byId("trigger-list").querySelector('[data-edit-rule="' + CSS.escape(id) + '"]');
+  (edit || byId("add-trigger")).focus();
+}
+
+function closeRuleEditor(id) {
+  byId("trigger-form").hidden = true;
+  byId("saved-rules").hidden = false;
+  editingRule = null;
+  if (page === "triggers" && authenticated) focusRule(id);
 }
 
 function render() {
@@ -814,20 +899,24 @@ for (const id of ["camera-form", "storage-form"]) {
       await api("config", {camera});
       const current = cameraDraft();
       if (Object.keys(camera).every(key => camera[key] === current[key])) dirtyForms.delete(id);
-    }, "Camera settings saved.");
+    }, "Video settings saved.");
   });
 }
 
 byId("add-trigger").addEventListener("click", () => editRule());
-byId("cancel-rule").addEventListener("click", () => {
-  byId("trigger-form").hidden = true;
-  byId("add-trigger").focus();
+byId("cancel-rule").addEventListener("click", () => closeRuleEditor(editingRule?.id));
+byId("remove-rule").addEventListener("click", () => {
+  if (editingRule && window.confirm("Delete the recording rule “" + editingRule.id + "”?")) saveRuleChange(null);
 });
 byId("trigger-form").elements.type.addEventListener("change", event => {
   const type = event.target.value;
   ruleFields(type, editingRule?.type === type ? editingRule : defaults[type]);
 });
-byId("rule-fields").addEventListener("input", describeGpioRule);
+byId("rule-fields").addEventListener("input", validateRuleFields);
+byId("trigger-form").addEventListener("invalid", event => {
+  const details = event.target.closest("details");
+  if (details) details.open = true;
+}, true);
 byId("trigger-form").addEventListener("submit", event => {
   event.preventDefault();
   const fields = event.currentTarget.elements;
@@ -838,32 +927,56 @@ byId("trigger-form").addEventListener("submit", event => {
     const input = fields.namedItem(name);
     rule[name] = input.type === "number" ? input.valueAsNumber : input.value;
   }
-  const existing = snapshot.config.triggers;
-  if (existing.some(item => item.id === rule.id && item.id !== editingRule?.id)) {
-    notice("Choose a unique rule ID.", true);
-    return;
-  }
-  if (editingRule && JSON.stringify(editingRule) !== JSON.stringify(existing.find(item => item.id === editingRule.id))) {
-    notice("This rule changed on the device. Reopen it to edit the latest settings.", true);
-    return;
-  }
-  const triggers = editingRule ? existing.map(item => item.id === editingRule.id ? rule : item) : [...existing, rule];
-  act(async () => {
-    await api("config", {triggers});
-    byId("trigger-form").hidden = true;
-    editingRule = null;
-  }, "Rule saved.");
+  saveRuleChange(rule);
 });
+
+async function saveRuleChange(rule) {
+  if (actionPending) return;
+  let saved = false;
+  setText("rule-error", "");
+  byId("rule-inputs").disabled = true;
+  await act(async () => {
+    try {
+      const current = (await api("status")).config.triggers;
+      if (editingRule && JSON.stringify(editingRule) !== JSON.stringify(current.find(item => item.id === editingRule.id)))
+        throw new Error("This rule changed on the Pi. Cancel and reopen it to use its latest settings.");
+      if (rule && current.some(item => item.id === rule.id && item.id !== editingRule?.id))
+        throw new Error("A rule already uses this name. Choose another rule name.");
+      let triggers;
+      if (!rule) triggers = current.filter(item => item.id !== editingRule.id);
+      else if (!editingRule) triggers = [...current, rule];
+      else triggers = current.map(item => item.id === editingRule.id ? rule : item);
+      await api("config", {triggers});
+      saved = true;
+      notice(rule ? "Rule saved." : "Rule deleted.");
+    } catch (error) {
+      if (authenticated) {
+        setText("rule-error", error.message);
+        byId("rule-error").focus();
+      }
+    }
+  });
+  byId("rule-inputs").disabled = false;
+  if (saved) closeRuleEditor(rule?.id);
+}
 const navToggle = byId("nav-toggle");
 navToggle.addEventListener("click", () => {
   const open = navToggle.getAttribute("aria-expanded") === "true";
   navToggle.setAttribute("aria-expanded", String(!open));
 });
-function closeMenuOnPage() {
+function closeMenuOnPage(heading = byId("page-title")) {
   navToggle.setAttribute("aria-expanded", "false");
-  byId("page-title").focus({preventScroll: true});
+  heading.focus({preventScroll: true});
   window.scrollTo(0, 0);
 }
+byId("skip-navigation").addEventListener("click", event => {
+  event.preventDefault();
+  closeMenuOnPage();
+});
+byId("dismiss-feedback").addEventListener("click", () => {
+  notice();
+  byId("page-title").focus({preventScroll: true});
+});
 byId("main-nav").addEventListener("click", event => {
   const link = event.target.closest("a");
   if (link?.hash === window.location.hash) closeMenuOnPage();
@@ -876,8 +989,11 @@ document.addEventListener("keydown", event => {
 });
 window.addEventListener("hashchange", () => {
   if (authenticated) {
+    const previous = page;
     navigate();
-    closeMenuOnPage();
+    const heading = previous === "camera" && page === "camera"
+      ? document.querySelector("[data-camera-view]:not([hidden]) h2") : null;
+    closeMenuOnPage(heading || byId("page-title"));
   }
 });
 document.addEventListener("visibilitychange", () => {

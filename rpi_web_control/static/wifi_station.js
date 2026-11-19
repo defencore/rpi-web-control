@@ -90,11 +90,11 @@ export function setupStation({api, act, busy, apply, consoleUrl}) {
       ? "The Wi-Fi adapter is a bridge port. Use a separate Wi-Fi adapter to keep the wired bridge."
       : "Waiting for a managed Wi-Fi interface. Check the radio state under Network interfaces.";
     else if (adapter.mode === "ap") {
-      message = adapter.name + " is hosting an access point. Scanning this radio may briefly interrupt Wi-Fi traffic. " +
+      message = adapter.name + " is hosting a hotspot. Scanning this radio may briefly interrupt Wi-Fi traffic. " +
         (choices.some(row => row.name !== adapter.name && row.mode !== "ap" && readyStates.includes(row.state))
           ? "Select another Wi-Fi interface to scan independently. "
           : "A second Wi-Fi adapter can scan independently. ") +
-        "To join a router manually, enter its network name over Ethernet. Connecting this radio to the router disconnects its access point clients.";
+        "To join a router manually, enter its network name over Ethernet. Connecting this radio to the router disconnects devices using its hotspot.";
     } else if (adapter.state === "failed") message = "The last Wi-Fi connection failed. Scan again or enter the router’s network name manually.";
     else if (["connecting", "disconnecting"].includes(adapter.state)) message = adapter.name + " is " + adapter.state + ". Wait for the radio to finish before starting another operation.";
     setText("station-status", message);
@@ -133,8 +133,8 @@ export function setupStation({api, act, busy, apply, consoleUrl}) {
     if (scan.disabled || !adapter || busy() || status.pending) return;
     const name = adapter.name;
     const activeAp = adapter.mode === "ap";
-    if (activeAp && !window.confirm("Scan for networks on " + name + " while it hosts the access point? " +
-        "Wi-Fi traffic may pause briefly. The access point and DHCP settings will be kept.")) return;
+    if (activeAp && !window.confirm("Scan for networks on " + name + " while it hosts the hotspot? " +
+        "Wi-Fi traffic may pause briefly. The hotspot and DHCP settings will be kept.")) return;
     const id = ++scanId;
     scanning = true;
     inputs();

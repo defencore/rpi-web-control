@@ -103,6 +103,21 @@ class CatalogTests(unittest.TestCase):
         with self.assertRaises(RecordingSourceChanged):
             self.open(third.name, "video.y4m", target_id="changed")
 
+    def test_exact_lookup_reuses_the_verified_catalog_row_without_scanning(self):
+        clip = self.session()
+        incomplete = self.session(2, "recording")
+        page = self.listing(source="usb")
+        with patch("os.scandir", side_effect=AssertionError("Exact lookup scanned the folder")):
+            result = self.listing(session=clip.name, source="usb", target_id=page["target_id"])
+            self.assertEqual(result, page)
+            for name in (incomplete.name, "20261118T154500Z-000000000003"):
+                with self.subTest(name=name):
+                    lookup = self.listing(session=name)
+                    self.assertEqual(lookup["sessions"], [])
+                    self.assertIsNone(lookup["next_cursor"])
+            with self.assertRaises(RecordingSourceChanged):
+                self.listing(session=clip.name, target_id="changed")
+
     def test_unsafe_files_and_malformed_manifests_are_not_exposed(self):
         secret = self.media.parent / "private.key"
         secret.write_bytes(b"private")
