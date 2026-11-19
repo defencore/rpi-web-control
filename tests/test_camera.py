@@ -1,6 +1,8 @@
 import csv
+import errno
 import io
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -212,11 +214,58 @@ class CameraTests(unittest.TestCase):
             deadline = time.monotonic() + 1
             while self.camera.status()["recording"] and time.monotonic() < deadline:
                 time.sleep(.01)
-            self.assertEqual(self.camera.status()["last_error"], "Storage full")
+            self.assertIn("Could not write recording " + str(directory), self.camera.status()["last_error"])
+            self.assertIn("Storage full", self.camera.status()["last_error"])
         self.assertEqual(json.loads((directory / "session.json").read_text())["status"], "incomplete")
         self.camera.start_recording(Path(self.temp.name), "retry")
         self.wait_frames(1)
         self.camera.stop_recording()
+
+    def test_unwritable_session_shows_the_destination_and_releases_the_camera(self):
+        with patch("rpi_web_control.recording.os.mkdir", side_effect=OSError(errno.EROFS, "Read-only file system")), \
+                self.assertRaisesRegex(OSError, "Could not start a recording") as error:
+            self.camera.start_recording(Path(self.temp.name), "test")
+        self.assertIn(self.temp.name, str(error.exception))
+        self.assertIn("Read-only file system", str(error.exception))
+        self.assertFalse(self.camera.status()["active"])
+        self.assertFalse(self.camera.status()["recording"])
+
+    def test_data_fsync_failure_stops_with_incomplete_session_and_allows_restart(self):
+        directory = Path(self.camera.start_recording(Path(self.temp.name), "manual"))
+        self.wait_frames(2)
+        original_fsync = os.fsync
+        outcomes = iter([OSError(errno.EIO, "Input/output error")])
+
+        def sync(fd):
+            failure = next(outcomes, None)
+            if failure:
+                raise failure
+            return original_fsync(fd)
+
+        with patch("rpi_web_control.recording.os.fsync", side_effect=sync), \
+                self.assertRaisesRegex(OSError, "Recording stopped") as raised:
+            self.camera.stop_recording()
+        self.assertIn(str(directory), str(raised.exception))
+        self.assertFalse(self.camera.status()["recording"])
+        self.assertFalse(self.camera.status()["active"])
+        self.assertIn("Input/output error", self.camera.status()["last_error"])
+        manifest = json.loads((directory / "session.json").read_text())
+        self.assertEqual(manifest["status"], "incomplete")
+        self.assertIn("Input/output error", manifest["error"])
+        self.camera.start_recording(Path(self.temp.name), "retry")
+        self.wait_frames(1)
+        self.camera.stop_recording()
+
+    def test_unsaved_manifest_never_publishes_a_complete_recording(self):
+        directory = Path(self.camera.start_recording(Path(self.temp.name), "manual"))
+        self.wait_frames(1)
+        failure = OSError(errno.EROFS, "Read-only file system", "session.json.tmp")
+        with patch("rpi_web_control.recording.os.replace", side_effect=failure), \
+                self.assertRaisesRegex(OSError, "Could not finish saving"):
+            self.camera.stop_recording()
+        self.assertFalse(self.camera.status()["recording"])
+        self.assertNotEqual(json.loads((directory / "session.json").read_text())["status"], "complete")
+        self.assertIn("Read-only file system", self.camera.status()["last_error"])
 
     def test_padded_chroma_planes_keep_only_image_pixels(self):
         try:

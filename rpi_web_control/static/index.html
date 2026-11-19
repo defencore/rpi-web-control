@@ -69,6 +69,10 @@
       </header>
       <p id="offline-message" class="notice error" role="status" hidden>Connection lost. Reconnecting to the device…</p>
       <p id="feedback" class="notice" role="status" aria-live="polite"></p>
+      <section class="clock-notice" id="trigger-pause-notice" aria-label="Recording triggers paused" hidden>
+        <div><strong>Recording triggers paused</strong><p class="field-help">Return any held contacts to their idle position before resuming.</p></div>
+        <button id="resume-triggers" class="button secondary small" type="button">Resume triggers</button>
+      </section>
       <section id="network-pending" class="network-pending" aria-labelledby="network-pending-title" hidden>
         <div><h2 id="network-pending-title">Keep these network settings?</h2>
           <p class="field-help">Check the primary console address over the intended connection. The Pi will restore the previous settings unless you keep the change.</p>
@@ -121,7 +125,8 @@
           <article class="panel summary"><header><svg><use href="#i-drive"/></svg><h2>Recording storage</h2></header>
             <div class="summary-body"><strong id="monitor-space">—</strong>
               <meter id="disk-usage" aria-label="Disk space used" min="0" max="100" hidden></meter>
-              <p id="record-location" class="mono"></p><p class="subtle" id="record-sources"></p></div>
+              <p id="record-location" class="mono"></p><p class="subtle" id="record-sources"></p>
+              <button id="manual-hold" class="button secondary small" type="button" hidden>Add manual hold</button></div>
             <a class="panel-link" href="#storage">Manage destination <svg><use href="#i-chevron"/></svg></a></article>
           <article class="panel summary"><header><svg><use href="#i-trigger"/></svg><h2>Triggers</h2></header>
             <div class="summary-body"><strong id="trigger-count">—</strong><p id="trigger-summary" class="subtle"></p></div>
@@ -340,7 +345,8 @@ source .export-venv/bin/activate</code></pre></div>
       </section>
       <section id="page-triggers" class="settings-page" aria-label="Recording triggers" hidden>
         <article class="panel settings-card"><header class="panel-title"><h2>Recording rules</h2><button type="button" class="button secondary small" id="add-trigger"><svg><use href="#i-plus"/></svg>Add rule</button></header>
-          <div class="form-body"><div id="trigger-list" class="rule-list"></div></div>
+          <div class="form-body"><div id="trigger-list" class="rule-list"></div>
+            <button id="trigger-pause" class="button secondary small" type="button" hidden>Pause triggers</button></div>
         </article>
         <form id="trigger-form" class="panel settings-card" hidden>
           <header class="panel-title"><h2 id="rule-title">New rule</h2></header>

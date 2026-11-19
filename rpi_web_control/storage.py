@@ -51,8 +51,11 @@ def read_mounts(path):
     for line in path.read_text(errors="surrogateescape").splitlines():
         left, right = line.split(" - ", 1)
         fields, tail = left.split(), right.split()
+        # ext4 may retain rw in the mount flags after a journal failure while
+        # its superblock reports emergency_ro or shutdown.
+        options = set(fields[5].split(",")) | set(tail[2].split(","))
         mount = Mount(fields[0], fields[2], _unescape(fields[3]), Path(_unescape(fields[4])),
-                      tail[0], _unescape(tail[1]), "ro" in (fields[5] + "," + tail[2]).split(","))
+                      tail[0], _unescape(tail[1]), bool(options & {"ro", "emergency_ro", "shutdown"}))
         mounts[mount.number] = mount
     if not mounts:
         raise ValueError("The mounted filesystem table is unavailable.")
@@ -211,7 +214,8 @@ class Storage:
             if mount is None or not path.is_relative_to(mount.path):
                 raise ValueError("The recording directory is no longer on its mounted filesystem.")
         if writable and mount.read_only:
-            raise ValueError("The recording filesystem is read-only.")
+            raise ValueError(f"The recording filesystem at {mount.path} is read-only or shut down. "
+                             "Check the drive connection and filesystem before recording here.")
         return {"mountpoint": str(mount.path), "filesystem": mount.fs, "root": mount.root,
                 "volume": self._key(mount)}
 

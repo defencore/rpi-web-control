@@ -41,6 +41,8 @@ class PackageTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2, result.stderr)
         report = result.stdout.decode()
         self.assertNotIn("CAMERA PROBED", report)
+        self.assertIn("Recording drive faults", report)
+        self.assertIn("controller is down", report)
         self.assertIn("apt-get is unavailable.", report)
         self.assertIn("Filesystem space", report)
         self.assertIn("-n 80 -u rpi-web-control.service", report)

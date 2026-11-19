@@ -51,6 +51,18 @@ class ValidationTests(unittest.TestCase):
             validate_rules([a, b])
         validate_rules([a, dict(b, enabled=False)])
 
+    def test_toggle_button_configuration(self):
+        base = {"id": "button", "type": "gpio", "pin": 17}
+        self.assertEqual(validate_rules([base]), validate_rules([dict(base, toggle_on_press=False)]))
+        rule, = validate_rules([dict(base, toggle_on_press=True)])
+        self.assertTrue(rule["toggle_on_press"])
+        self.assertEqual([rule], validate_rules([rule]))
+        for extra in ({"toggle_on_press": 1}, {"toggle_on_press": "yes"},
+                      {"toggle_on_press": True, "stop": {"type": "gpio", "pin": 27}},
+                      {"toggle_on_press": True, "stop_on_return": True}):
+            with self.subTest(extra=extra), self.assertRaises(ValueError):
+                validate_rules([{**base, **extra}])
+
     def test_stop_inputs_normalize_and_reserve_their_resources(self):
         base = {"id": "gate", "type": "gpio", "pin": 17}
         for stop, expected in (
@@ -196,7 +208,7 @@ class InputTests(unittest.TestCase):
 
 class ManagerTests(unittest.TestCase):
     @contextlib.contextmanager
-    def latch(self, stop_rule, **options):
+    def latch(self, stop_rule=None, **options):
         signals = {17: queue.Queue(), 27: queue.Queue(), "uart": queue.Queue()}
         events = []
 
@@ -224,7 +236,9 @@ class ManagerTests(unittest.TestCase):
             self.assertEqual(source, "gate")
             events.append(value)
 
-        rule = {"id": "gate", "type": "gpio", "pin": 17, "contact": "NC", "stop": stop_rule, **options}
+        rule = {"id": "gate", "type": "gpio", "pin": 17, "contact": "NC", **options}
+        if stop_rule is not None:
+            rule["stop"] = stop_rule
         manager = TriggerManager(record)
         with patch.object(inputs, "_gpio_levels", reader), patch.object(inputs, "_uart_lines", reader):
             try:
@@ -232,6 +246,24 @@ class ManagerTests(unittest.TestCase):
                 yield send, events, manager
             finally:
                 manager.close()
+
+    def test_toggle_button_ignores_held_startup_and_toggles_once_per_activation(self):
+        with self.latch(toggle_on_press=True) as (send, events, manager):
+            send(17, True)
+            self.assertEqual(manager.status()[0]["state"], "ready")
+            send(17, True)
+            send(17, False)
+            self.assertEqual(events, [])
+            send(17, True)
+            send(17, True)
+            send(17, False)
+            self.assertEqual(events, [True])
+            send(17, True)
+            send(17, False)
+            self.assertEqual(events, [True, False])
+            send(17, True)
+            manager.close()
+            self.assertEqual(events, [True, False, True, False])
 
     def test_latched_gpio_stop_inhibits_start_and_requires_a_new_start_edge(self):
         with self.latch({"type": "gpio", "pin": 27, "contact": "NC"}) as (send, events, manager):

@@ -122,6 +122,22 @@ class WebTests(unittest.TestCase):
         self.assertLessEqual(result, sampled)
         self.assertLessEqual(sampled, target + elapsed_ms + 1)
 
+    def test_operator_can_stop_and_pause_a_gpio_owned_recording(self):
+        endpoint = "/api/triggers/pause"
+        self.assertEqual(self.request(endpoint, {"paused": True}).status, 401)
+        self.login()
+        self.assertEqual(self.request(endpoint, {"paused": True}, Origin="http://external").status, 403)
+        for invalid in ({}, {"paused": 1}, {"paused": False, "stop_manual": True}, {"paused": True, "pin": 17}):
+            self.assertEqual(self.request(endpoint, invalid).status, 400)
+        self.app.trigger("Button", True)
+        self.assertEqual(self.request(endpoint, {"paused": True, "stop_manual": True}).status, 200)
+        status = json.load(self.request("/api/status"))
+        self.assertTrue(status["triggers_paused"])
+        self.assertEqual(status["recording_sources"], [])
+        self.assertFalse(status["camera"]["recording"])
+        self.assertEqual(self.request(endpoint, {"paused": False}).status, 200)
+        self.assertFalse(json.load(self.request("/api/status"))["triggers_paused"])
+
     def test_session_and_http_controls(self):
         self.assertEqual(self.request("/api/status").status, 401)
         self.assertEqual(self.request("/api/login", {"token": "incorrect"}).status, 401)

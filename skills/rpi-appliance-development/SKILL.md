@@ -15,6 +15,7 @@ Begin in `rpi_web_control/application.py` for recording ownership and `rpi_web_c
 4. Test two overlapping sources, a missing device, rule replacement, and service shutdown. Check that status identifies the failing rule and the other source continues recording.
 5. Add the rule fields to the browser editor and schema documentation. Check defaults and unit labels against the backend.
 6. For a GPIO with a separate stop, verify the initial levels, rearming, lost inputs, contact bounce and an overlapping recording source. Exercise a second contact and a complete serial stop line. Check that documentation uses physical pin numbers for wiring and BCM numbers for configuration. [GPIO wiring examples](../../docs/triggers.md#gpio)
+7. For a momentary GPIO button, test both hold and two-press behavior from rest and from a held input at startup. Pause trigger-owned recording from the header, check the saved rules and ensure input activity or a pending recording retry cannot restart capture before resume. Verify a storage I/O error remains visible independently of trigger ownership. [GPIO17 button setup](../../docs/triggers.md#set-up-a-momentary-button-on-gpio17) · [Storage diagnostics](../../docs/storage.md#troubleshoot-a-recording-io-error)
 
 ## Change a web or packaging boundary
 

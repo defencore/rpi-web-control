@@ -11,9 +11,14 @@ from .capture import PiSource, SimSource, as_jpeg, select_mode
 from .live import LiveOutput, check_geometry, endpoint, idle_status, validate_max_fps
 from .mode_test import CameraBusy, ModeTest
 from .recording import Recording
+from .storage import RecordingTarget
 
 LOG = logging.getLogger(__name__)
 DEFAULTS = {"width": 640, "height": 480, "fps": 30, "osd": False, "sensor_bit_depth": 0}
+
+
+def _storage_failure(message, cause):
+    return OSError(f"{message} ({cause}). Check the selected drive and free space in Storage.")
 
 
 def validate(settings):
@@ -269,9 +274,12 @@ class Camera:
         try:
             self._record = Recording(directory, self._state["settings"], self.backend, self._caps["model"],
                                      reason, sensor_mode=self._state["sensor_mode"], realtime_ns=self._realtime_ns)
-        except Exception:
+        except Exception as exc:
             if not self._state["preview"] and not self._live:
                 self._end_capture()
+            if isinstance(exc, OSError):
+                path = directory.path if isinstance(directory, RecordingTarget) else directory
+                raise _storage_failure(f"Could not start a recording in {path}", exc) from exc
             raise
         self._update(recording=True, session=str(self._record.path), frames=0, last_error=None)
         return str(self._record.path)
@@ -281,6 +289,8 @@ class Camera:
         try:
             if record:
                 record.close(error)
+        except OSError as exc:
+            raise _storage_failure(f"Recording stopped. Could not finish saving {record.path}", exc) from exc
         finally:
             self._update(recording=False)
             if not self._state["preview"] and not self._live:
@@ -355,11 +365,12 @@ class Camera:
                 try:
                     self._record.write(frame, jpeg)
                 except OSError as exc:
+                    failure = _storage_failure(f"Could not write recording {self._record.path}", exc)
                     if not self._live and not self._state["preview"]:
-                        raise
-                    self._update(last_error=str(exc))
+                        raise failure from exc
+                    self._update(last_error=str(failure))
                     try:
-                        self._stop_recording(str(exc))
+                        self._stop_recording(str(failure))
                     except OSError as cleanup:
                         LOG.error("Recording flush failed: %s", cleanup)
                 else:

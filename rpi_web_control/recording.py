@@ -95,6 +95,8 @@ class Recording:
         with self._open("session.json.tmp", "w", encoding="utf-8") as file:
             json.dump(self.manifest, file, indent=2, allow_nan=False)
             file.write("\n")
+            file.flush()
+            os.fsync(file.fileno())
         os.replace("session.json.tmp", "session.json", src_dir_fd=self.session_fd, dst_dir_fd=self.session_fd)
 
     def write(self, frame, jpeg):
@@ -115,19 +117,25 @@ class Recording:
             self.flush_deadline = time.monotonic() + 1
 
     def close(self, error=None):
+        flush_error = None
         try:
-            with self.files:
-                for file in (self.video, self.index):
-                    file.flush()
-                    os.fsync(file.fileno())
-        except OSError as exc:
-            error = str(exc)
-            raise
-        finally:
+            try:
+                with self.files:
+                    for file in (self.video, self.index):
+                        file.flush()
+                        os.fsync(file.fileno())
+            except OSError as exc:
+                flush_error = exc
+                error = error or str(exc)
             self.manifest.update(status="incomplete" if error or not self.count else "complete",
                                  error=error, frames=self.count,
                                  ended_at=utc_from_ns(self._realtime_ns()).isoformat())
-            try:
-                self._manifest()
-            finally:
-                os.close(self.session_fd)
+            if flush_error:
+                # Preserve the original delivery error even if the volume can no
+                # longer accept an incomplete manifest.
+                with contextlib.suppress(OSError):
+                    self._manifest()
+                raise flush_error
+            self._manifest()
+        finally:
+            os.close(self.session_fd)

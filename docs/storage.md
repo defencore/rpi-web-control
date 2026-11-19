@@ -40,6 +40,23 @@ Select **Download recording (.zip)** on a completed session. The ZIP contains th
 
 Open **Individual files** to retrieve just the video, index or manifest. Individual file downloads support HTTP byte ranges for resuming an interrupted transfer. An interrupted ZIP download restarts from the beginning. Both use HTTPS and follow the console's token setting. Refresh the list if the source changes.
 
+## Troubleshoot a recording I/O error
+
+An `[Errno 5] Input/output error` with a session directory name means a filesystem operation failed. It can appear while creating or finalizing a clip, or while reading a directory to display recordings. The error alone does not identify the device or tell you how much of the clip was written.
+
+1. Note the exact session name, the time, and **Storage → Active directory**. In **Monitor**, check whether a recording is active or waiting to resume. Use **Stop & pause triggers** if a rule still holds it. While investigating storage you can pause the automatic rules from **Triggers** as well. In earlier versions, disable the active rule and release any manual hold. [Recording controls](triggers.md#input-timing-and-troubleshooting)
+2. From the workstation checkout, collect the board report over the cable with `./install.sh --diagnose ubuntu@192.168.55.100`, substituting the board's SSH login and address. The diagnostic run is read-only and works offline. Keep the report with the session name.
+3. On the Pi, use the commands below to compare the intended volume against the mounted device and inspect recent errors. For USB, replace the NVMe mountpoint with `/srv/rpi-web-control-usb`. For the system card or a custom location, use `findmnt --target /path/to/active/directory` with the actual directory.
+
+   ```sh
+   lsblk -o NAME,TRAN,MODEL,FSTYPE,SIZE,MOUNTPOINTS
+   findmnt --mountpoint /srv/rpi-web-control-nvme -o TARGET,SOURCE,FSTYPE,OPTIONS
+   journalctl -b -u rpi-web-control.service -n 100 --no-pager
+   sudo journalctl -k -b -n 150 --no-pager
+   ```
+
+Check for a missing mount or storage resets near the time of the failure. An NVMe controller reset failure, a drive suddenly reporting **0 B**, an aborted ext4 journal, or mount options containing `emergency_ro` or `shutdown` are reasons to keep recording stopped on that volume. Preserve the session directory and copy any readable `video.*`, `frames.csv` and `session.json` files together before attempting repairs. After the expected volume is available again and reports its normal capacity, make a short test clip and verify it appears as complete in **Recordings**.
+
 ## Delete recordings and free space
 
 In **Recordings**, choose the managed USB or NVMe directory you want to clean. Finish active recordings and release recording triggers first. To remove one completed session, use **Delete recording…** on its row. To remove eligible completed sessions directly in the displayed directory, choose **Clean recordings…**. Review the device, directory, number of sessions and total bytes. Type `DELETE` for one session or `CLEAN` for the directory, then confirm. Choose **Cancel** to close the review. Deleting a session removes its video, frame index and manifest together.

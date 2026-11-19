@@ -52,6 +52,47 @@ class ApplicationTests(unittest.TestCase):
         self.assertFalse(self.app.camera.status()["active"])
         self.assertTrue((Path(session) / "frames.csv").is_file())
 
+    def test_pause_releases_trigger_owners_and_applies_edits_on_resume(self):
+        sample = {"id": "timer", "type": "timer", "interval_s": 90, "duration_s": 1}
+        self.app.configure({"triggers": [sample]})
+        self.app.record("manual", True)
+        self.app.trigger("timer", True)
+        session = self.app.camera.status()["session"]
+        self.app.pause_recording_triggers(True)
+        self.assertEqual(self.app.status()["recording_sources"], ["manual"])
+        self.assertEqual(self.app.camera.status()["session"], session)
+        self.app.trigger("timer", True)
+        self.app.configure({"triggers": [{**sample, "id": "updated"}, {**sample, "enabled": False}]})
+        paused = self.app.status()
+        self.assertTrue(paused["triggers_paused"])
+        self.assertEqual([(r["id"], r["state"]) for r in paused["triggers"]],
+                         [("updated", "paused"), ("timer", "disabled")])
+        self.assertEqual(self.app.triggers.status(), [])
+        self.app.pause_recording_triggers(True, stop_manual=True)
+        self.assertEqual(self.app.status()["recording_sources"], [])
+        self.assertFalse(self.app.camera.status()["recording"])
+        self.app.pause_recording_triggers(False)
+        wait_for(lambda: self.app.triggers.status()[0]["state"] == "ready")
+        self.assertFalse(self.app.status()["triggers_paused"])
+        self.assertEqual(self.app.triggers.status()[0]["id"], "updated")
+
+    def test_stop_all_blocks_recovery_even_when_file_close_fails(self):
+        self.app.trigger("Button", True)
+        close = self.app.camera.stop_recording
+
+        def fail_close():
+            close()
+            raise OSError("Could not finalize recording")
+
+        with patch.object(self.app.camera, "stop_recording", side_effect=fail_close):
+            with self.assertRaisesRegex(OSError, "Could not finalize"):
+                self.app.pause_recording_triggers(True, stop_manual=True)
+        self.app.trigger("Button", True)
+        result = self.app.status()
+        self.assertTrue(result["triggers_paused"])
+        self.assertFalse(result["camera"]["recording"])
+        self.assertEqual(result["recording_sources"], [])
+
     def test_cleanup_requires_host_and_pinned_external_device_to_match(self):
         disk, = self.app.usb.status()["devices"]
         ready = self.app.apply_nvme({"action": "mount", "device": disk["device"], "revision": disk["revision"],

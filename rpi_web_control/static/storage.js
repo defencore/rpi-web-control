@@ -202,6 +202,11 @@ function recordingsPanel(options, isVisible) {
       targetId = result.target_id;
       cleanupAllowed = result.cleanup_allowed === true;
       list.append(...result.sessions.map(recordingRow));
+      if (result.unreadable_sessions?.length) {
+        const folders = result.unreadable_sessions.join(", ");
+        list.append(element("p", "The drive reported an I/O error reading " + folders +
+          ". Check the drive in Storage, then refresh this list.", "danger"));
+      }
       deletionControls();
       cursor = result.next_cursor;
       more.hidden = !cursor;

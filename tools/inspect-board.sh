@@ -94,6 +94,15 @@ if [ "$diagnostics" = yes ]; then
     done
     inspect df -hP "$@"
 
+    printf '\nRecording drive faults (current boot, visible to this account)\n'
+    if command -v findmnt >/dev/null 2>&1; then
+        for dir in /srv/rpi-web-control-nvme /srv/rpi-web-control-usb; do
+            findmnt -rn -o SOURCE,TARGET,OPTIONS --mountpoint "$dir" || printf '%s has no separate mount.\n' "$dir"
+        done
+    fi
+    inspect journalctl --no-pager -k -b -n 12 --grep='(?i)(nvme|pcie|usb).*(controller is down|reset|timeout|disabling device|disconnect)'
+    inspect journalctl --no-pager -k -b -n 12 --grep='(?i)(ext4|jbd2|buffer I/O|blk_update_request).*(error|read.only|aborted|lost)'
+
     printf '\nIPv4 routes, DNS and bridge ports\n'
     inspect ip -4 route show
     inspect nmcli -f GENERAL.DEVICE,IP4.ADDRESS,IP4.GATEWAY,IP4.DNS device show

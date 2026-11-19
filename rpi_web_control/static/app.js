@@ -14,7 +14,10 @@ const gpioStopDefaults = {
   gpio: {pin: 27, contact: "NC", debounce_ms: 30},
   uart: {device: "/dev/ttyUSB0", baud: 115200, command: "STOP"},
 };
-const contactChoices = [["NO", "Normally open"], ["NC", "Normally closed"]];
+const contactChoices = [["NO", "Normally open · closes on press"], ["NC", "Normally closed · opens on press"]];
+// Physical pin numbers on the standard Raspberry Pi 40-pin header, indexed by BCM line.
+const headerPins = [27, 28, 3, 5, 7, 29, 31, 26, 24, 21, 19, 23, 32, 33,
+  8, 10, 36, 11, 12, 35, 38, 40, 15, 16, 18, 22, 37, 13];
 const integerFormat = new Intl.NumberFormat("en-US");
 const fpsFormat = new Intl.NumberFormat("en-US", {maximumFractionDigits: 2});
 const clockFormat = new Intl.DateTimeFormat("en-GB", {
@@ -261,13 +264,21 @@ function renderMonitor() {
   const settings = cam.settings || snapshot.config.camera;
   const owners = snapshot.recording_sources || [];
   const manual = owners.includes("manual");
+  const triggers = owners.filter(source => source.startsWith("trigger:"));
+  const stopping = cam.recording || owners.length > 0;
   const record = byId("record");
   const camAvailable = capabilities?.available !== false;
-  record.disabled = actionPending || (!camAvailable && !manual);
-  record.classList.toggle("active", manual);
-  record.querySelector("use").setAttribute("href", manual ? "#i-stop" : "#i-record");
-  record.querySelector("span").textContent = manual ? (owners.length > 1 ? "Release manual hold" : "Stop recording") : cam.recording ? "Hold recording" : "Start recording";
-  record.setAttribute("aria-pressed", String(manual));
+  record.disabled = actionPending || (!camAvailable && !stopping);
+  record.classList.toggle("active", stopping);
+  record.querySelector("use").setAttribute("href", stopping ? "#i-stop" : "#i-record");
+  record.querySelector("span").textContent = triggers.length ? "Stop & pause triggers" : stopping ? "Stop recording" : "Start recording";
+  byId("trigger-pause-notice").hidden = !snapshot.triggers_paused;
+  byId("resume-triggers").disabled = actionPending;
+  byId("trigger-pause").hidden = snapshot.triggers_paused || !snapshot.config.triggers.some(rule => rule.enabled);
+  byId("trigger-pause").disabled = actionPending;
+  byId("manual-hold").hidden = !triggers.length || (!manual && !cam.recording);
+  byId("manual-hold").disabled = actionPending;
+  setText("manual-hold", manual ? "Release manual hold" : "Add manual hold");
   setText("device-name", capabilities?.model || (cam.backend === "simulated" ? "Simulated camera" : "Capture device"));
   const preview = byId("preview");
   preview.disabled = actionPending || cam.mode_test?.state === "running" || (!camAvailable && !cam.preview);
@@ -293,7 +304,8 @@ function renderMonitor() {
   usage.hidden = !hasCapacity;
   if (hasCapacity) usage.value = (1 - volume.free_bytes / volume.total_bytes) * 100;
   setText("record-location", cam.recording && cam.session ? cam.session : snapshot.config.storage.directory);
-  setText("record-sources", owners.length ? "Held by " + owners.join(", ") : "");
+  const labels = owners.map(source => source.startsWith("trigger:") ? "rule “" + source.slice(8) + "”" : "manual control");
+  setText("record-sources", owners.length ? "Recording requested by " + labels.join(", ") : "");
   setText("camera-error", cam.last_error || snapshot.storage?.error || capabilities?.error || "");
   const rules = snapshot.config.triggers;
   const active = (snapshot.triggers || []).filter(rule => rule.active).length;
@@ -436,10 +448,26 @@ function renderRoots() {
   byId("storage-roots").replaceChildren(...roots.map(root => element("li", root)));
 }
 
+function gpioBehavior(rule) {
+  const pin = "GPIO" + rule.pin;
+  const active = rule.contact === "NC" ? "open" : "closed";
+  const idle = rule.contact === "NC" ? "closed" : "open";
+  if (rule.toggle_on_press)
+    return pin + " (normally " + idle + ") · Press once to start, release, then press again to stop.";
+  if (!rule.stop)
+    return pin + " · Records while " + active + ". Stops when " + idle + ".";
+  const start = pin + " · Starts when the contact " + (rule.contact === "NC" ? "opens" : "closes") + ". ";
+  const end = rule.stop.type === "gpio"
+    ? "GPIO" + rule.stop.pin + (rule.stop.contact === "NC" ? " opens" : " closes")
+    : rule.stop.device + " receives “" + rule.stop.command + "”";
+  return start + "Stops when " + end + (rule.stop_on_return ? " or the start contact returns to " + idle : "") + ".";
+}
+
 function renderRules() {
   const rules = snapshot.config.triggers;
   const statuses = snapshot.triggers || [];
-  const key = JSON.stringify([rules, statuses]);
+  const owners = snapshot.recording_sources || [];
+  const key = JSON.stringify([rules, statuses, owners]);
   if (key === lastRuleList) return;
   lastRuleList = key;
   const list = byId("trigger-list");
@@ -449,12 +477,24 @@ function renderRules() {
   }
   list.replaceChildren(...rules.map(rule => {
     const status = statuses.find(item => item.id === rule.id);
-    const state = status?.active ? "active" : status?.state || (rule.enabled === false ? "disabled" : "starting");
+    const holding = owners.includes("trigger:" + rule.id);
+    const state = holding ? "Holding recording" : status?.state || (rule.enabled === false ? "disabled" : "starting");
     const row = element("div", undefined, "rule-row");
     const info = element("div");
-    info.append(element("strong", rule.id), element("p", ruleNames[rule.type] + " · " + state, "subtle"));
+    info.append(element("strong", rule.id), element("p", ruleNames[rule.type] + " · " + state, holding ? "rule-holding" : "subtle"));
+    if (rule.type === "gpio") info.append(element("p", gpioBehavior(rule)));
     if (status?.error) info.append(element("p", status.error, "danger"));
     const actions = element("div", undefined, "rule-actions");
+    if (holding) actions.append(button("Disable rule", () => {
+      if (!window.confirm("Disable “" + rule.id + "” and release its recording request? Other recording sources keep their requests.")) return;
+      act(async () => {
+        const current = (await api("status")).config.triggers;
+        if (JSON.stringify(rule) !== JSON.stringify(current.find(item => item.id === rule.id)))
+          throw new Error("This rule changed on the device. Review its current settings and try again.");
+        await api("config", {triggers: current.map(item => item.id === rule.id ? {...item, enabled: false} : item)});
+        if (editingRule?.id === rule.id) byId("trigger-form").hidden = true;
+      }, "Rule disabled.");
+    }));
     actions.append(button("Edit", () => editRule(rule)), button("Remove", () => {
       if (!window.confirm('Remove the recording rule "' + rule.id + '"?')) return;
       act(async () => {
@@ -489,9 +529,11 @@ function triggerField(name, title, value, options = {}) {
 
 function gpioStopFields(rule) {
   const saved = rule.stop;
-  const selector = triggerField("stop_type", "Stop recording when", saved?.type || "level", {choices: [
-    ["level", "Start contact returns to normal"], ["gpio", "Second GPIO contact activates"], ["uart", "UART command arrives"],
+  const selector = triggerField("stop_type", "Recording behavior", rule.toggle_on_press ? "toggle" : saved?.type || "level", {choices: [
+    ["level", "Hold to record"], ["toggle", "Press once to start, press again to stop"],
+    ["gpio", "Stop with a second contact"], ["uart", "Stop with a UART command"],
   ]});
+  selector.classList.add("full-field");
   const type = selector.querySelector("select");
   function field(kind, name, label, options) {
     const data = saved?.type === kind ? saved : gpioStopDefaults[kind];
@@ -514,7 +556,7 @@ function gpioStopFields(rule) {
   const returnLabel = element("label", undefined, "check-line");
   returnLabel.append(onReturn, "Also stop when the start contact returns to normal");
   function showSelection() {
-    returnLabel.hidden = onReturn.disabled = type.value === "level";
+    returnLabel.hidden = onReturn.disabled = !["gpio", "uart"].includes(type.value);
     for (const [kind, fields] of [["gpio", gpio], ["uart", uart]]) {
       for (const label of fields) {
         label.hidden = type.value !== kind;
@@ -527,6 +569,40 @@ function gpioStopFields(rule) {
   return [selector, ...gpio, ...uart, returnLabel];
 }
 
+function gpioRuleFromForm(fields) {
+  const rule = {pin: fields.pin.valueAsNumber, contact: fields.contact.value, debounce_ms: fields.debounce_ms.valueAsNumber};
+  const mode = fields.stop_type.value;
+  if (mode === "toggle") rule.toggle_on_press = true;
+  if (mode === "gpio" || mode === "uart") {
+    rule.stop = {type: mode};
+    for (const name of Object.keys(gpioStopDefaults[mode])) {
+      const input = fields.namedItem("stop_" + name);
+      rule.stop[name] = input.type === "number" ? input.valueAsNumber : input.value;
+    }
+    if (fields.stop_on_return.checked) rule.stop_on_return = true;
+  }
+  return rule;
+}
+
+function describeGpioRule() {
+  const fields = byId("trigger-form").elements;
+  if (fields.type.value !== "gpio") return;
+  const rule = gpioRuleFromForm(fields);
+  const physical = headerPins[rule.pin];
+  const hint = byId("gpio-rule-help");
+  if (!physical || (rule.stop?.type === "gpio" && !headerPins[rule.stop.pin])) {
+    hint.textContent = "Enter a BCM GPIO number from 0 to 27.";
+    return;
+  }
+  let wiring = "On the standard 40-pin header, wire the button between pin " + physical + " (GPIO" + rule.pin + ") and pin 9 (GND).";
+  if (rule.stop?.type === "gpio")
+    wiring += " Wire the stop contact between pin " + headerPins[rule.stop.pin] + " (GPIO" + rule.stop.pin + ") and pin 14 (GND).";
+  const armed = rule.stop || rule.toggle_on_press
+    ? " If pressed when enabled, release the button before the first press."
+    : " If already " + (rule.contact === "NC" ? "open" : "closed") + " when enabled, this contact starts recording.";
+  hint.replaceChildren(element("p", wiring), element("p", gpioBehavior(rule) + armed));
+}
+
 function ruleFields(type, data) {
   const field = (name, label, opts) => triggerField(name, label, data[name], opts);
   let fields;
@@ -534,10 +610,13 @@ function ruleFields(type, data) {
     case "timer":
       fields = [field("interval_s", "Repeat interval (s)", {min: 0.1, step: "any"}), field("duration_s", "Recording duration (s)", {min: 0.1, step: "any"})];
       break;
-    case "gpio":
+    case "gpio": {
+      const hint = element("div", undefined, "field-help gpio-rule-help full-field");
+      hint.id = "gpio-rule-help";
       fields = [field("pin", "BCM GPIO pin", {min: 0, max: 27}), field("contact", "Contact type", {choices: contactChoices}),
-        field("debounce_ms", "Debounce time (ms)", {min: 0, max: 1000}), ...gpioStopFields(data)];
+        ...gpioStopFields(data), field("debounce_ms", "Debounce time (ms)", {min: 0, max: 1000}), hint];
       break;
+    }
     case "sensor":
       fields = [field("path", "Sensor sysfs path", {text: true}), field("comparison", "Record when", {choices: [["above", "Above threshold"], ["below", "Below threshold"]]}), field("threshold", "Threshold (sensor units)", {step: "any"}), field("hysteresis", "Hysteresis (sensor units)", {min: 0, step: "any"}), field("poll_ms", "Poll interval (ms)", {min: 20, max: 60000})];
       break;
@@ -546,18 +625,25 @@ function ruleFields(type, data) {
       break;
   }
   byId("rule-fields").replaceChildren(...fields);
+  if (type === "gpio") describeGpioRule();
 }
 
 function editRule(rule = null) {
   editingRule = rule;
   const form = byId("trigger-form");
   form.hidden = false;
-  form.elements.id.value = rule?.id || "";
-  form.elements.type.value = rule?.type || "timer";
+  if (rule) form.elements.id.value = rule.id;
+  else {
+    const ids = new Set(snapshot.config.triggers.map(item => item.id));
+    let number = 1;
+    while (ids.has("rule-" + number)) number++;
+    form.elements.id.value = "rule-" + number;
+  }
+  form.elements.type.value = rule?.type || "gpio";
   form.elements.enabled.checked = rule?.enabled !== false;
   setText("rule-title", rule ? "Edit rule" : "New rule");
-  ruleFields(form.elements.type.value, rule || defaults.timer);
-  form.elements.id.focus();
+  ruleFields(form.elements.type.value, rule || defaults.gpio);
+  form.elements.type.focus();
 }
 
 function render() {
@@ -606,7 +692,16 @@ byId("logout").addEventListener("click", () => act(async () => {
   signInScreen();
   notice("", false, "login-message");
 }));
-byId("record").addEventListener("click", () => act(() => api("recording", {enabled: !snapshot.recording_sources.includes("manual")})));
+byId("record").addEventListener("click", () => {
+  if (snapshot.recording_sources.some(source => source.startsWith("trigger:"))) {
+    act(() => api("triggers/pause", {paused: true, stop_manual: true}));
+  } else {
+    act(() => api("recording", {enabled: !snapshot.camera.recording && !snapshot.recording_sources.includes("manual")}));
+  }
+});
+byId("trigger-pause").addEventListener("click", () => act(() => api("triggers/pause", {paused: true})));
+byId("resume-triggers").addEventListener("click", () => act(() => api("triggers/pause", {paused: false})));
+byId("manual-hold").addEventListener("click", () => act(() => api("recording", {enabled: !snapshot.recording_sources.includes("manual")})));
 byId("preview").addEventListener("click", () => act(() => api("preview", {enabled: !snapshot.camera.preview})));
 byId("mode-test-start").addEventListener("click", () => {
   const key = byId("mode-test-selection").value;
@@ -659,21 +754,16 @@ byId("trigger-form").elements.type.addEventListener("change", event => {
   const type = event.target.value;
   ruleFields(type, editingRule?.type === type ? editingRule : defaults[type]);
 });
+byId("rule-fields").addEventListener("input", describeGpioRule);
 byId("trigger-form").addEventListener("submit", event => {
   event.preventDefault();
   const fields = event.currentTarget.elements;
   const type = fields.type.value;
   const rule = {id: fields.id.value, type, enabled: fields.enabled.checked};
-  function fieldValue(name) {
+  if (type === "gpio") Object.assign(rule, gpioRuleFromForm(fields));
+  else for (const name of Object.keys(defaults[type])) {
     const input = fields.namedItem(name);
-    return input.type === "number" ? input.valueAsNumber : input.value;
-  }
-  for (const name of Object.keys(defaults[type])) rule[name] = fieldValue(name);
-  if (type === "gpio" && fields.stop_type.value !== "level") {
-    const stopType = fields.stop_type.value;
-    rule.stop = {type: stopType};
-    for (const name of Object.keys(gpioStopDefaults[stopType])) rule.stop[name] = fieldValue("stop_" + name);
-    if (fields.stop_on_return.checked) rule.stop_on_return = true;
+    rule[name] = input.type === "number" ? input.valueAsNumber : input.value;
   }
   const existing = snapshot.config.triggers;
   if (existing.some(item => item.id === rule.id && item.id !== editingRule?.id)) {

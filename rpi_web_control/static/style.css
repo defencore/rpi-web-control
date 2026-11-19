@@ -155,7 +155,11 @@ input[name="directory"], input[name="path"], input[name="device"], input[name="i
 .rule-row + .rule-row { padding-top: 14px; margin-top: 14px; border-top: 1px solid var(--edge); }
 .rule-row strong { font-size: .95rem; overflow-wrap: anywhere; }
 .rule-row p { font-size: .82rem; margin-top: 2px; overflow-wrap: anywhere; }
-.rule-actions { display: flex; gap: 6px; }
+.rule-row .rule-holding { color: var(--green); font-weight: 650; }
+.rule-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+#rule-fields .full-field { grid-column: 1 / -1; }
+.gpio-rule-help { border-left: 3px solid var(--green); padding-left: 12px; overflow-wrap: anywhere; }
+.gpio-rule-help p + p { margin-top: 6px; }
 .danger { color: var(--red); }
 .notice { font-size: .88rem; padding: 10px 13px; margin-bottom: 14px; background: #e8f1de; border: 1px solid #c5d5bc; border-radius: 5px; overflow-wrap: anywhere; }
 .notice:empty { display: none; }

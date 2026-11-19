@@ -31,7 +31,7 @@ From the same checkout, `make check` runs the tests, `make deb` creates the arm6
 
 ## Operating the camera
 
-The page header shows the recording state and the manual recording control on every page. On smaller screens, open **Menu** to switch pages.
+The page header shows the recording state on every page. Use **Stop recording** for a manual-only clip or **Stop & pause triggers** when a rule is keeping the clip active. Return inputs to rest before choosing **Resume triggers**. On smaller screens, open **Menu** to switch pages.
 
 The console compares the Pi's clock with the clock on the device running the browser. If the clocks differ by more than five seconds after allowing for request latency, a warning appears on any page. Check your computer or phone's time and stop any active recording. Selecting **Set Pi time** immediately copies the browser device's time to the Pi. This works over a local connection with no internet access.
 
@@ -42,7 +42,7 @@ The console compares the Pi's clock with the clock on the device running the bro
 | Stream | Choose a receiver IP, UDP port and optional stream FPS limit. Copy the GStreamer playback command and compare capture rate, sender rate and drop counters. |
 | Camera | Run a capture test for one or all advertised sensor modes, compare measured FPS, and set output size, bit depth, FPS and OSD. Choose or restore a sensor boot profile and request a reboot. [Supported modules and vendor profiles](docs/firmware.md#built-in-camera-profiles) |
 | Storage | See the active recording directory and choose **Record to USB** or **Record to NVMe** for a ready drive. Expand disk setup to mount or prepare a drive. |
-| Triggers | Record while a contact is open or closed, or start on a contact and stop on a second GPIO or serial command. Timer, numeric sensor and UART rules are also available. [40-pin wiring diagram and setup examples](docs/triggers.md#gpio) |
+| Triggers | Set up a GPIO button to record while held or to start and stop on successive presses. A second GPIO or serial command can also stop a clip. Timer, numeric sensor and UART rules are available. [GPIO17 pushbutton setup and wiring](docs/triggers.md#set-up-a-momentary-button-on-gpio17) |
 | Network | Scan nearby Wi-Fi networks and connect the Pi to a router while keeping a fixed Ethernet address. The Pi can also host or bridge an access point. Direct-cable recovery uses `192.168.55.100` by default. [Join Wi-Fi](docs/network.md#join-an-existing-wi-fi-network) · [Host an access point](docs/network.md#create-a-wi-fi-access-point) |
 
 The frame rate setting applies to capture. Browser preview shares the latest JPEG among subscribers, at up to eight updates per second. Closing the preview or losing a browser connection leaves an active recording running. The last manual or trigger release closes the clip. A capture failure ends the affected session. While a previously active source still requests recording, the service attempts to reopen a new session with backoff. Changing camera settings or storage during an active recording returns a conflict.
@@ -120,6 +120,7 @@ The API accepts requests without a token by default. When token protection is en
 | POST /api/reboot | Request a reboot using the reviewed firmware revision and an explicit boolean confirmation |
 | GET /api/stream.mjpg | Multipart JPEG stream while preview is enabled |
 | POST /api/preview, POST /api/recording | Set `{"enabled":true}` or `{"enabled":false}` |
+| POST /api/triggers/pause | Send `{"paused":true}` to release automatic recording requests while keeping any manual hold, or `{"paused":true,"stop_manual":true}` to release both. Send `{"paused":false}` to resume the saved rules. Read `triggers_paused` in `GET /api/status`. |
 | POST /api/config | Save one or more sections. Camera fields merge, storage takes `{"directory":"/absolute/path"}`, and triggers take the complete rule list. |
 | POST /api/network | Enable Wi-Fi, scan nearby networks on a selected radio, stage a connection and confirm it or roll it back. [Network API](docs/network.md#api) |
 | POST /api/logout | End the browser session using an empty JSON object |

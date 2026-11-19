@@ -52,6 +52,7 @@ class Application:
         self.config_lock = threading.RLock()
         self.record_lock = threading.Condition()
         self.sources = set()
+        self.triggers_paused = False
         self.closing = False
         self.network = SimulatedNetwork(state_dir) if simulated else Network()
         self.network_lock = threading.Lock()
@@ -67,7 +68,7 @@ class Application:
 
     def record(self, source, enabled):
         with self.record_lock:
-            if self.closing:
+            if self.closing or (enabled and self.triggers_paused and source.startswith("trigger:")):
                 return
             if enabled:
                 self._check_reboot()
@@ -81,6 +82,28 @@ class Application:
                     self.camera.stop_recording()
             self.record_lock.notify_all()
             LOG.info("Recording source %s active=%s", source, enabled)
+
+    def pause_recording_triggers(self, paused, *, stop_manual=False):
+        with self.config_lock:
+            if not paused:
+                if self.triggers_paused:
+                    with self.record_lock:
+                        self.triggers_paused = False
+                    self.triggers.configure(self.config["triggers"])
+                return
+            try:
+                with self.record_lock:
+                    self.triggers_paused = True
+                    held = {source for source in self.sources if source.startswith("trigger:")}
+                    if stop_manual:
+                        held.add("manual")
+                    self.sources.difference_update(held)
+                    self.record_lock.notify_all()
+                    if not self.sources and self.camera.status()["recording"]:
+                        self.camera.stop_recording()
+            finally:
+                # Finish reader threads outside the claim lock, even when closing the file fails.
+                self.triggers.configure([])
 
     def _start_recording(self, source):
         directory = self.store.directory(self.config["storage"]["directory"])
@@ -335,7 +358,7 @@ class Application:
                         self.camera.configure(previous["camera"])
                     raise
                 self.config = candidate
-            if candidate["triggers"] != previous["triggers"]:
+            if candidate["triggers"] != previous["triggers"] and not self.triggers_paused:
                 self.triggers.configure(candidate["triggers"])
 
     def network_status(self):
@@ -360,6 +383,12 @@ class Application:
                 "config": self.config,
                 "camera": camera,
                 "recording_sources": sorted(self.sources),
+                "triggers_paused": self.triggers_paused,
+                "triggers": [
+                    {"id": rule["id"], "type": rule["type"], "enabled": rule["enabled"], "active": False,
+                     "state": "paused" if rule["enabled"] else "disabled", "error": None}
+                    for rule in self.config["triggers"]
+                ] if self.triggers_paused else self.triggers.status(),
                 "recording_directories": self._recording_directories(),
                 "storage_roots": [str(root) for root in self.store.roots],
             }
@@ -370,7 +399,6 @@ class Application:
             state["storage"] = {"free_bytes": usage.free, "total_bytes": usage.total}
         except (OSError, ValueError) as exc:
             state["storage"] = {"free_bytes": None, "total_bytes": None, "error": str(exc)}
-        state["triggers"] = self.triggers.status()
         state["network"] = self.network_status()
         state["device_realtime_ms"] = self.clock.now_ms()
         return state

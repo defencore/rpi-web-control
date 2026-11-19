@@ -153,6 +153,27 @@ class StorageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "allowed storage root"):
             disk.identity("/dev/mtd3")
 
+    def test_ext4_failure_flags_refuse_new_sessions_and_preserve_read_access(self):
+        disk = self.store()
+        saved = disk.identity(self.root)
+        for flags in ("rw,errors=remount-ro", "ro", "rw,emergency_ro", "rw,shutdown",
+                      "rw,emergency_ro,shutdown"):
+            with self.subTest(flags=flags):
+                self.mount_file.write_text(self.system_line + self.usb_line.replace("/dev/sda1 rw",
+                                                                                    "/dev/sda1 " + flags))
+                writable = flags == "rw,errors=remount-ro"
+                self.assertEqual(disk.identity(self.root, saved, writable=False), saved)
+                disk.invalidate_inventory()
+                volume = next(row for row in disk.inventory() if row["device"] == "/dev/sda1")
+                self.assertEqual(volume["read_only"], not writable)
+                if writable:
+                    self.assertEqual(disk.identity(self.root, saved), saved)
+                else:
+                    with self.assertRaisesRegex(ValueError, "read-only or shut down"):
+                        with disk.open_target(self.root / "new", saved):
+                            self.fail("An unhealthy volume accepted a recording target.")
+                    self.assertFalse((self.root / "new").exists())
+
     def test_recording_files_remain_on_open_directory_after_path_replacement(self):
         disk = Storage([self.root], linux=False)
         with disk.open_target(self.root / "sub" / "day") as target:

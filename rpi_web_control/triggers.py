@@ -11,7 +11,7 @@ from .trigger_inputs import INPUTS
 LOG = logging.getLogger(__name__)
 FIELDS = {
     "timer": {"interval_s", "duration_s"},
-    "gpio": {"pin", "contact", "debounce_ms", "stop", "stop_on_return"},
+    "gpio": {"pin", "contact", "debounce_ms", "toggle_on_press", "stop", "stop_on_return"},
     "sensor": {"path", "comparison", "threshold", "hysteresis", "poll_ms"},
     "uart": {"device", "baud", "start_command", "stop_command"},
 }
@@ -86,6 +86,13 @@ def _rule_fields(rule):
         return {"interval_s": interval, "duration_s": duration}
     if kind == "gpio":
         fields = _gpio_fields(rule)
+        toggle = rule.get("toggle_on_press", False)
+        if type(toggle) is not bool:
+            raise ValueError("toggle_on_press must be true or false.")
+        if toggle:
+            if "stop" in rule:
+                raise ValueError("Choose either a toggle button or a separate stop input.")
+            fields["toggle_on_press"] = True
         if "stop" in rule:
             fields["stop"] = _stop_input(rule["stop"], fields["pin"])
         if "stop_on_return" in rule:

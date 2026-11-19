@@ -89,14 +89,23 @@ def list_recordings(storage, directory, identity, cursor=None, *, source="curren
     if cursor is not None and not _SESSION.fullmatch(cursor):
         raise ValueError("Invalid recording page cursor.")
     rows = []
+    unreadable = []
     with storage.open_target(directory, identity, create=False) as target:
         identifier = _target_id(target, target_id)
         suffix = f"?source={source}&target_id={identifier}"
-        with os.scandir(target.fd) as entries:
-            names = heapq.nlargest(_PAGE_SIZE + 1, (
-                entry.name for entry in entries if _SESSION.fullmatch(entry.name)
-                and (cursor is None or entry.name < cursor) and entry.is_dir(follow_symlinks=False)
-            ))
+        # Read names first. Opening each candidate below checks the directory type
+        # and lets a damaged entry fail independently of the rest of the page.
+        try:
+            with os.scandir(target.fd) as entries:
+                names = heapq.nlargest(_PAGE_SIZE + 1, (
+                    entry.name for entry in entries if _SESSION.fullmatch(entry.name)
+                    and (cursor is None or entry.name < cursor)
+                ))
+        except OSError as exc:
+            if exc.errno in (errno.EIO, errno.EROFS):
+                raise OSError(f"Could not read the recording directory {target.path} ({exc}). "
+                              "Check the recording drive in Storage.") from exc
+            raise
         for name in names[:_PAGE_SIZE]:
             try:
                 with _session(storage, target, name) as (meta, files, _):
@@ -109,7 +118,12 @@ def list_recordings(storage, directory, identity, cursor=None, *, source="curren
                     })
             except FileNotFoundError:
                 continue
+            except OSError as exc:
+                if exc.errno not in (errno.EIO, errno.EROFS):
+                    raise
+                unreadable.append(name)
     return {"directory": str(target.path), "target_id": identifier, "sessions": rows,
+            "unreadable_sessions": unreadable,
             "next_cursor": names[_PAGE_SIZE - 1] if len(names) > _PAGE_SIZE else None}
 
 

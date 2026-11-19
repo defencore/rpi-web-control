@@ -1,4 +1,5 @@
 """Validate completed-session discovery and descriptor-based access on removable media."""
+import errno
 import io
 import json
 import os
@@ -160,3 +161,25 @@ class CatalogTests(unittest.TestCase):
         with patch.object(self.storage, "fd_mount_id", side_effect=["root", "root", "root", "submount"]):
             with self.assertRaises(FileNotFoundError):
                 self.open(session.name, "video.y4m")
+
+    def test_unreadable_session_preserves_healthy_rows_and_pagination(self):
+        first, bad, third = [self.session(n) for n in (1, 2, 3)]
+        real_open = os.open
+
+        def fail_bad(name, *args, **options):
+            if name == bad.name:
+                raise OSError(errno.EIO, "Input/output error", name)
+            return real_open(name, *args, **options)
+
+        with patch("os.open", side_effect=fail_bad), patch("rpi_web_control.downloads._PAGE_SIZE", 2):
+            page = self.listing()
+            self.assertEqual(page["unreadable_sessions"], [bad.name])
+            self.assertEqual([row["name"] for row in page["sessions"]], [third.name])
+            self.assertEqual(page["next_cursor"], bad.name)
+            next_page = self.listing(cursor=page["next_cursor"], target_id=page["target_id"])
+            self.assertEqual(next_page["unreadable_sessions"], [])
+            self.assertEqual([row["name"] for row in next_page["sessions"]], [first.name])
+            with self.assertRaises(OSError) as error:
+                self.open(bad.name, "video.y4m")
+            self.assertEqual(error.exception.errno, errno.EIO)
+        self.assertTrue(bad.is_dir())

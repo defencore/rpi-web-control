@@ -21,14 +21,14 @@ Check the reported model and arm64 package architecture, OS release, boot volume
 From the workstation, copy the verified archive to the operator's home directory and open an SSH shell on the target.
 
 ```sh
-scp dist/rpi-web-control_0.9.0-2_arm64.deb operator@capture-pi.local:
+scp dist/rpi-web-control_0.9.1-1_arm64.deb operator@capture-pi.local:
 ssh operator@capture-pi.local
 ```
 
 On the Pi, run the following commands from the operator's home directory. When upgrading an existing installation, stop active recordings first.
 
 ```sh
-sudo apt install ./rpi-web-control_0.9.0-2_arm64.deb
+sudo apt install ./rpi-web-control_0.9.1-1_arm64.deb
 systemctl is-active rpi-web-control.service
 sudo openssl x509 -in /etc/rpi-web-control/tls.crt -noout -fingerprint -sha256
 ```
@@ -123,6 +123,7 @@ The sensor timestamp refers to the first active row and uses Linux BOOTTIME. Jou
 | --- | --- | --- |
 | Timer | Use a short interval and duration. Observe two cycles. | Each cycle starts and ends a recording claim. |
 | GPIO NO/NC | Wire a dry contact to the selected BCM pin and ground. Test normally open, then normally closed behavior on the actual carrier. Exercise contact bounce. | Idle input, asserted input and release match the selected polarity and debounce. |
+| GPIO17 pushbutton | Connect a normally open button between pin 11 and GND pin 9. Test the [hold and two-press modes](triggers.md#set-up-a-momentary-button-on-gpio17), including a button held at enable. On a trigger-owned recording, stop from the header, press while paused, put the button at rest and resume. | In hold mode release ends the clip. In two-press mode one press starts and the next press stops. Pausing ends the active clip, keeps the saved rules and prevents a new automatic start until resumed. |
 | GPIO with separate stop | Follow the [contact wiring examples](triggers.md#gpio). Start on GPIO17 and stop first with GPIO27, then with a serial line. Repeat with the start held open and with manual recording active. | At initial arm an open start contact stays idle. Each new start opens one clip. The selected stop releases only its own rule, and a held start requires a new contact cycle. |
 | Sensor | Select a readable supported sysfs sensor. Move its reading across the threshold and recovery boundary. | Log raw readings and units, both transitions, and behavior inside hysteresis. |
 | UART | Use the configured serial interface and baud rate. Send the configured start and stop lines. | Both commands change the rule state. An unrelated line leaves recording ownership unchanged. |

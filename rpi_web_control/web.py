@@ -424,6 +424,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(202, app.reboot(body))
             elif path == "/api/config":
                 app.configure(body)
+            elif path == "/api/triggers/pause":
+                if (set(body) - {"paused", "stop_manual"} or type(body.get("paused")) is not bool
+                        or type(body.get("stop_manual", False)) is not bool
+                        or (body.get("stop_manual") and not body["paused"])):
+                    raise ValueError("Set paused to true or false. A manual stop requires pausing triggers.")
+                app.pause_recording_triggers(body["paused"], stop_manual=body.get("stop_manual", False))
             elif path == "/api/network":
                 return self.reply(200, app.switch_network(body))
             else:

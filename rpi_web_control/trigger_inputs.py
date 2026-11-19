@@ -154,6 +154,21 @@ def _gpio_levels(rule, stopping, ready, publish):
 
 
 def gpio(rule, stop, ready, publish):
+    if rule.get("toggle_on_press"):
+        previous = None
+        recording = False
+
+        def toggle_on_activation(active):
+            nonlocal previous, recording
+            if previous is None:
+                ready()  # Use the first stable reading as the baseline, including a held button.
+            elif active and not previous:
+                recording = not recording
+                publish(recording)
+            previous = active
+
+        _gpio_levels(rule, stop.is_set, lambda: None, toggle_on_activation)
+        return
     if "stop" not in rule:
         _gpio_levels(rule, stop.is_set, ready, publish)
         return
