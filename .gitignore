@@ -1,6 +1,39 @@
+# Python environments and local test output
 __pycache__/
 *.py[cod]
-.dev-state/
 .venv/
+/venv/
+.pytest_cache/
+.coverage
+.coverage.*
+/htmlcov/
+
+# Debian builds, installer reports and local board diagnostics
 dist/
-docs/board-report.txt
+rpi-web-control_*.deb
+/docs/board-report.txt
+/capture-pi-*.txt
+/camera-modes-*.json
+/*-retest.json
+/*-retest.log
+/timing-markers.jsonl
+/controller-journal.jsonl
+
+# Simulator state, local configuration and capture exports
+.dev-state/
+.env
+.env.local
+.env.*.local
+/captures/
+/recordings/
+/*.mp4
+[0-9]???????T??????Z-????????????/
+[0-9]???????T??????Z-????????????.zip
+
+# OS metadata and editor working files
+.DS_Store
+._*
+Thumbs.db
+*.swp
+*.swo
+*~
